@@ -1,4 +1,4 @@
-import { OBFUSCATED_WORD_PAIRS } from "../src/data/wordList";
+import { OBFUSCATED_WORD_PAIRS } from "./wordData";
 
 export default function handler(req: any, res: any) {
   try {
