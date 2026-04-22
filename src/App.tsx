@@ -54,6 +54,22 @@ export default function App() {
     const saved = localStorage.getItem("undercover_v3_leaderboard");
     return saved ? JSON.parse(saved) : {};
   });
+  const [totalWordPairs, setTotalWordPairs] = useState<number | null>(null);
+
+  useEffect(() => {
+    const fetchCount = async () => {
+      try {
+        const res = await fetch("/api/random-pair");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.totalPairs) setTotalWordPairs(data.totalPairs);
+        }
+      } catch (e) {
+        console.error("Failed to fetch word count", e);
+      }
+    };
+    fetchCount();
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("undercover_v3_leaderboard", JSON.stringify(leaderboard));
@@ -459,9 +475,19 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="mt-8 p-4 bg-[#F5F2EA] rounded-2xl border border-[#E6E2D9] text-center">
-                       <span className="text-[#A49F96] text-[10px] font-black uppercase tracking-widest">Total Pemain</span>
-                       <p className="text-2xl font-black text-[#4A453E]">{civilianTarget + undercoverTarget}</p>
+                    <div className="mt-8 p-4 bg-[#F5F2EA] rounded-2xl border border-[#E6E2D9] text-center flex flex-col gap-4">
+                       <div>
+                        <span className="text-[#A49F96] text-[10px] font-black uppercase tracking-widest">Total Pemain</span>
+                        <p className="text-2xl font-black text-[#4A453E]">{civilianTarget + undercoverTarget}</p>
+                       </div>
+                       
+                       {totalWordPairs && (
+                         <div className="pt-4 border-t border-[#E6E2D9]">
+                            <span className="text-[#8E745A] text-[9px] font-black uppercase tracking-[0.2em]">Koleksi Kata</span>
+                            <p className="text-lg font-black text-[#4A5D4E]">{totalWordPairs}+ Pasangan</p>
+                            <p className="text-[8px] font-bold text-[#A49F96] mt-0.5">DIPERBARUI SECARA OTOMATIS</p>
+                         </div>
+                       )}
                     </div>
                   </div>
 
