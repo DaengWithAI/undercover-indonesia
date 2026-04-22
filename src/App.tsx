@@ -106,6 +106,10 @@ export default function App() {
   const restartGame = async () => {
     try {
       const response = await fetch("/api/random-pair");
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server error: ${response.status} - ${errorText}`);
+      }
       const wordPair = await response.json();
       
       const roles: Role[] = [
