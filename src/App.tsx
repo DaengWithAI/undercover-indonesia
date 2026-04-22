@@ -68,7 +68,17 @@ export default function App() {
     if (playerCount < 3) return;
 
     try {
-      const response = await fetch("/api/random-pair");
+      const fetchWithRetry = async (url: string, retries = 2): Promise<Response> => {
+        const res = await fetch(url);
+        if (!res.ok && retries > 0) return fetchWithRetry(url, retries - 1);
+        return res;
+      };
+
+      const response = await fetchWithRetry("/api/random-pair");
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`API failed: ${response.status} ${text}`);
+      }
       const wordPair = await response.json();
 
       const roles: Role[] = [
