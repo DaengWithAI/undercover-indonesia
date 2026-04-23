@@ -14,7 +14,8 @@ import {
   Heart,
   Ghost,
   Home as HomeIcon,
-  Search
+  Search,
+  Eye
 } from "lucide-react";
 import { Player, GameState, GamePhase, Role, Card } from "./types";
 
@@ -40,6 +41,8 @@ export default function App() {
   const [showRevealReady, setShowRevealReady] = useState(false);
   const [currentRevealingName, setCurrentRevealingName] = useState("");
   const [playerToEliminate, setPlayerToEliminate] = useState<Player | null>(null);
+  const [playerToPeek, setPlayerToPeek] = useState<Player | null>(null);
+  const [isPeeking, setIsPeeking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
 
@@ -342,16 +345,18 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F2EA] text-[#4A453E] font-sans p-4 flex flex-col items-center">
-      <header className="w-full max-w-sm py-4 text-center">
-        <h1 className="text-3xl font-black tracking-tight text-[#4A5D4E] mb-1">
+    <div className="min-h-screen bg-[#F5F2EA] text-[#4A453E] font-sans p-3 flex flex-col items-center">
+      <header className={`w-full max-w-sm ${gameState.phase === "SETUP" && view === "GAME" ? "py-4 md:py-6" : "py-1.5"} text-center transition-all duration-300`}>
+        <h1 className={`${gameState.phase === "SETUP" && view === "GAME" ? "text-3xl" : "text-xl"} font-black tracking-tight text-[#4A5D4E] transition-all`}>
           UNDERCOVER
-          <span className="text-[#8E745A] block text-2xl">INDONESIA</span>
+          {(gameState.phase === "SETUP" && view === "GAME") && <span className="text-[#8E745A] block text-2xl">INDONESIA</span>}
         </h1>
-        <p className="text-[#A49F96] text-[9px] font-black tracking-[0.3em] uppercase">Game Pengelabuan Kata</p>
+        {(gameState.phase === "SETUP" && view === "GAME") && (
+          <p className="text-[#A49F96] text-[9px] font-black tracking-[0.3em] uppercase">Game Pengelabuan Kata</p>
+        )}
       </header>
 
-      <main className="w-full max-w-sm flex-1 px-1 mb-16 relative">
+      <main className={`w-full max-w-sm flex-1 px-1 ${gameState.phase === "SETUP" && view === "GAME" ? "mb-16" : "mb-6"} relative`}>
         <AnimatePresence mode="wait">
           {view === "LEADERBOARD" ? (
              <motion.div 
@@ -421,15 +426,15 @@ export default function App() {
                   exit={{ opacity: 0, scale: 0.9 }}
                   className="space-y-6"
                 >
-                  <div className="bg-[#FDFCFB] p-6 rounded-[2.5rem] shadow-xl shadow-[#D8D2C2]/30 border-4 border-[#E6E2D9]">
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="p-2.5 bg-[#E6E2D9] rounded-2xl">
-                        <Users className="text-[#4A5D4E]" size={20} />
+                  <div className="bg-[#FDFCFB] p-5 rounded-[2.5rem] shadow-xl shadow-[#D8D2C2]/30 border-4 border-[#E6E2D9]">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 bg-[#E6E2D9] rounded-2xl">
+                        <Users className="text-[#4A5D4E]" size={18} />
                       </div>
-                      <h2 className="text-lg font-black text-[#4A453E] uppercase tracking-tight">Atur Pemain</h2>
+                      <h2 className="text-base font-black text-[#4A453E] uppercase tracking-tight">Atur Pemain</h2>
                     </div>
 
-                    <div className="space-y-6">
+                    <div className="space-y-4">
                       <div className="flex items-center justify-between">
                         <div className="flex flex-col">
                           <span className="text-xs font-black text-[#A49F96] uppercase tracking-widest">Civilian</span>
@@ -475,17 +480,16 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="mt-8 p-4 bg-[#F5F2EA] rounded-2xl border border-[#E6E2D9] text-center flex flex-col gap-4">
+                    <div className="mt-6 p-4 bg-[#F5F2EA] rounded-2xl border border-[#E6E2D9] text-center flex flex-col gap-3">
                        <div>
                         <span className="text-[#A49F96] text-[10px] font-black uppercase tracking-widest">Total Pemain</span>
-                        <p className="text-2xl font-black text-[#4A453E]">{civilianTarget + undercoverTarget}</p>
+                        <p className="text-xl font-black text-[#4A453E]">{civilianTarget + undercoverTarget}</p>
                        </div>
                        
                        {totalWordPairs && (
-                         <div className="pt-4 border-t border-[#E6E2D9]">
-                            <span className="text-[#8E745A] text-[9px] font-black uppercase tracking-[0.2em]">Koleksi Kata</span>
-                            <p className="text-lg font-black text-[#4A5D4E]">{totalWordPairs}+ Pasangan</p>
-                            <p className="text-[8px] font-bold text-[#A49F96] mt-0.5">DIPERBARUI SECARA OTOMATIS</p>
+                         <div className="pt-3 border-t border-[#D3CFC6]">
+                            <p className="text-base font-black text-[#4A5D4E]">{totalWordPairs}+ Pasangan Kata</p>
+                            <p className="text-[8px] font-bold text-[#C17C5C] mt-0.5 uppercase">Koleksi Diperbarui</p>
                          </div>
                        )}
                     </div>
@@ -603,13 +607,13 @@ export default function App() {
                     </motion.div>
                   )}
 
-                  <div className="h-24 flex items-center justify-center">
+                  <div className="h-20 flex items-center justify-center">
                     {showPickedCard && (
                       <button
                         onClick={nextReveal}
-                        className="flex items-center gap-3 font-black px-12 py-6 rounded-[3rem] bg-[#4A453E] text-white shadow-xl transition-all active:scale-95"
+                        className="flex items-center gap-3 font-black px-10 py-5 rounded-[3rem] bg-[#4A453E] text-white shadow-xl transition-all active:scale-95"
                       >
-                        {gameState.players.length < (civilianTarget + undercoverTarget) ? "KARTU BERIKUTNYA" : "MULAI DISKUSI"}
+                        {gameState.cardPool.filter(c => c.isTaken).length < (civilianTarget + undercoverTarget) ? "KARTU BERIKUTNYA" : "MULAI FITNAH!"}
                         <ChevronRight size={24} />
                       </button>
                     )}
@@ -624,24 +628,32 @@ export default function App() {
                   animate={{ opacity: 1 }}
                   className="space-y-6"
                 >
-                  <div className="text-center py-6">
-                    <div className="inline-block bg-[#F5F2EA] text-[#8E745A] px-8 py-2 rounded-full text-xs font-black uppercase tracking-[0.4em] mb-4">
+                  <div className="text-center py-2 md:py-4">
+                    <div className="inline-block bg-[#F5F2EA] text-[#8E745A] px-6 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.4em] mb-2">
                       RONDE {gameState.round}
                     </div>
-                    <h2 className="text-4xl font-black text-[#4A453E] tracking-tight uppercase">Waktu Cerita!</h2>
-                    <p className="text-[#A49F96] font-bold mt-2">Gunakan imajinasimu, jangan sebutkan kata aslinya!</p>
+                    <h2 className="text-3xl font-black text-[#4A453E] tracking-tight uppercase">Waktu Cerita!</h2>
+                    <p className="text-[#A49F96] font-bold text-xs mt-1">Gunakan imajinasimu, jangan sebut kata aslinya!</p>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2.5">
                     {gameState.players.map((p) => (
                       <div 
                         key={p.id}
-                        className={`p-3 rounded-3xl border-4 flex flex-col items-center justify-center gap-1.5 aspect-square transition-all ${
+                        className={`p-3 rounded-3xl border-4 flex flex-col items-center justify-center gap-1.5 aspect-square transition-all relative ${
                           p.isAlive 
                           ? "bg-[#FDFCFB] border-[#E6E2D9] shadow-sm" 
                           : "bg-[#E6E2D9] border-[#D3CFC6] opacity-40 shadow-inner"
                         }`}
                       >
+                        {p.isAlive && (
+                          <button
+                            onClick={() => setPlayerToPeek(p)}
+                            className="absolute top-1 right-1 p-1.5 bg-[#F5F2EA] rounded-full text-[#A49F96] hover:text-[#C17C5C] transition-colors"
+                          >
+                            <Eye size={12} />
+                          </button>
+                        )}
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-lg ${p.isAlive ? "bg-[#4A5D4E] text-white shadow-md" : "bg-[#A49F96] text-[#D3CFC6]"}`}>
                           {p.name.charAt(0)}
                         </div>
@@ -650,6 +662,65 @@ export default function App() {
                       </div>
                     ))}
                   </div>
+
+                  {/* Peek Modal */}
+                  <AnimatePresence>
+                    {playerToPeek && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-[#4A453E]/60 backdrop-blur-md"
+                      >
+                        <motion.div
+                          initial={{ scale: 0.9 }}
+                          animate={{ scale: 1 }}
+                          exit={{ scale: 0.9 }}
+                          className="bg-[#FDFCFB] w-full max-w-[300px] rounded-[3rem] p-8 shadow-2xl text-center space-y-6 border-4 border-[#E6E2D9]"
+                        >
+                          {!isPeeking ? (
+                            <>
+                              <div className="w-16 h-16 bg-[#F5F2EA] rounded-full flex items-center justify-center mx-auto">
+                                <User className="text-[#4A5D4E]" size={32} />
+                              </div>
+                              <div>
+                                <h3 className="text-xl font-black text-[#4A453E] mb-2">Halo, {playerToPeek.name}!</h3>
+                                <p className="text-[#A49F96] text-xs font-bold leading-relaxed px-4">Pastikan hanya kamu yang melihat layar ini ya!</p>
+                              </div>
+                              <button
+                                onClick={() => setIsPeeking(true)}
+                                className="w-full py-4 bg-[#4A5D4E] text-white rounded-2xl font-black shadow-lg"
+                              >
+                                TAMPILKAN KATA
+                              </button>
+                              <button
+                                onClick={() => setPlayerToPeek(null)}
+                                className="w-full py-2 text-[#A49F96] font-black text-xs uppercase"
+                              >
+                                BATAL
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <div className="py-8 bg-[#4A5D4E] rounded-[2rem] border-4 border-[#5D6D5E]">
+                                <p className="text-white/60 text-[10px] font-black uppercase tracking-widest mb-2">Kata Rahasiamu:</p>
+                                <h3 className="text-4xl font-black text-white px-4 break-words">{playerToPeek.word}</h3>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  setPlayerToPeek(null);
+                                  setIsPeeking(false);
+                                }}
+                                className="w-full py-4 bg-[#4A453E] text-white rounded-2xl font-black shadow-lg"
+                              >
+                                OKE, SUDAH INGAT!
+                              </button>
+                            </>
+                          )}
+                        </motion.div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
                   <button
                     onClick={() => setGameState(prev => ({ ...prev, phase: "VOTING" }))}
@@ -668,9 +739,9 @@ export default function App() {
                   animate={{ opacity: 1, y: 0 }}
                   className="space-y-6 py-4"
                 >
-                  <div className="text-center py-4">
-                    <h2 className="text-4xl font-black text-[#C17C5C] tracking-tight uppercase mb-2">Vote Siapa?</h2>
-                    <p className="text-[#A49F96] font-bold px-8 leading-relaxed text-sm">Pilih pemain yang dicurigai sebagai penyusup!</p>
+                  <div className="text-center py-2 md:py-3">
+                    <h2 className="text-3xl font-black text-[#C17C5C] tracking-tight uppercase mb-1">Vote Siapa?</h2>
+                    <p className="text-[#A49F96] font-bold px-8 leading-relaxed text-xs">Pilih pemain yang dicurigai sebagai penyusup!</p>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2.5">
@@ -687,6 +758,15 @@ export default function App() {
                         <Vote className="text-[#D3CFC6] group-hover:text-[#C17C5C] transition-colors" size={14} />
                       </button>
                     ))}
+                  </div>
+
+                  <div className="text-center">
+                    <button 
+                      onClick={() => setGameState(prev => ({ ...prev, phase: "DISCUSSION" }))}
+                      className="text-[#A49F96] font-black text-[10px] uppercase tracking-wider underline underline-offset-4"
+                    >
+                      KEMBALI KE DISKUSI (INTIP KATA)
+                    </button>
                   </div>
 
                   {/* Confirmation Modal for Elimination */}
