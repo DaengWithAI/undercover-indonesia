@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { OBFUSCATED_WORD_PAIRS } from "./src/data/wordList.ts";
+import { WORD_PAIRS } from "./src/data/wordList.ts";
 
 async function startServer() {
   const app = express();
@@ -9,20 +9,18 @@ async function startServer() {
 
   app.use(express.json());
 
-  const decode = (str: string) => Buffer.from(str, "base64").toString("utf-8");
-
   // Filter out any invalid word pairs
-  const VALID_WORDS = OBFUSCATED_WORD_PAIRS.filter(p => p.c && p.u);
+  const VALID_WORDS = WORD_PAIRS.filter(p => p.c && p.u);
 
   // API Route to get a random word pair
   app.get("/api/random-pair", (req, res) => {
     const randomIndex = Math.floor(Math.random() * VALID_WORDS.length);
-    const obfuscatedPair = VALID_WORDS[randomIndex];
+    const pair = VALID_WORDS[randomIndex];
     
-    // Decode server-side so it's only available for this specific request
+    // Serve plain text directly from the server
     res.json({
-      civilian: decode(obfuscatedPair.c),
-      undercover: decode(obfuscatedPair.u),
+      civilian: pair.c,
+      undercover: pair.u,
       totalPairs: VALID_WORDS.length
     });
   });

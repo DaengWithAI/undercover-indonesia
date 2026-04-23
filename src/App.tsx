@@ -487,10 +487,19 @@ export default function App() {
                        </div>
                        
                        {totalWordPairs && (
-                         <div className="pt-3 border-t border-[#D3CFC6]">
-                            <p className="text-base font-black text-[#4A5D4E]">{totalWordPairs}+ Pasangan Kata</p>
-                            <p className="text-[8px] font-bold text-[#C17C5C] mt-0.5 uppercase">Koleksi Diperbarui</p>
-                         </div>
+                         <motion.div 
+                           initial={{ opacity: 0, y: 10 }}
+                           animate={{ opacity: 1, y: 0 }}
+                           className="pt-3 border-t border-[#D3CFC6]"
+                         >
+                            <div className="flex items-center justify-center gap-2 mb-1">
+                              <Search size={14} className="text-[#4A5D4E]" />
+                              <p className="text-base font-black text-[#4A5D4E]">{totalWordPairs}+ Pasangan Kata</p>
+                            </div>
+                            <div className="inline-block px-3 py-1 rounded-full bg-[#C17C5C] bg-opacity-10">
+                              <p className="text-[9px] font-black text-[#C17C5C] uppercase tracking-widest">Database Diperbarui</p>
+                            </div>
+                         </motion.div>
                        )}
                     </div>
                   </div>
@@ -550,7 +559,7 @@ export default function App() {
                         >
                           {card.isTaken ? (
                             <div className="flex flex-col items-center gap-1 p-1 px-2 w-full">
-                              <span className="text-[10px] font-black text-[#4A5D4E] uppercase text-center truncate w-full">{card.playerName}</span>
+                              <span className="text-sm font-black text-[#4A5D4E] uppercase text-center truncate w-full">{card.playerName}</span>
                               <span className="text-[8px] font-black text-[#4A5D4E] uppercase">DIPILIH</span>
                             </div>
                           ) : (
