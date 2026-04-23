@@ -544,17 +544,14 @@ export default function App() {
                           onClick={() => pickCard(card.id)}
                           className={`aspect-[3/4] rounded-3xl border-4 flex flex-col items-center justify-center transition-all ${
                             card.isTaken 
-                            ? "bg-[#E6E2D9] border-[#D3CFC6] opacity-40" 
+                            ? "bg-[#E6E2D9] border-[#D3CFC6] opacity-60" 
                             : "bg-[#FDFCFB] border-[#E6E2D9] cursor-pointer shadow-lg shadow-[#D8D2C2]/20"
                           }`}
                         >
                           {card.isTaken ? (
                             <div className="flex flex-col items-center gap-1 p-1 px-2 w-full">
-                              <span className="text-[8px] font-black text-[#A49F96] uppercase text-center truncate w-full">{card.playerName}</span>
-                              <div className="flex items-center gap-1 opacity-60">
-                                <Search size={10} className="text-[#A49F96]" />
-                                <span className="text-[7px] font-black text-[#A49F96] uppercase">DONE</span>
-                              </div>
+                              <span className="text-[10px] font-black text-[#4A5D4E] uppercase text-center truncate w-full">{card.playerName}</span>
+                              <span className="text-[8px] font-black text-[#4A5D4E] uppercase">DIPILIH</span>
                             </div>
                           ) : (
                             <User size={20} className="text-[#D3CFC6]" />
@@ -632,8 +629,8 @@ export default function App() {
                     <div className="inline-block bg-[#F5F2EA] text-[#8E745A] px-6 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.4em] mb-2">
                       RONDE {gameState.round}
                     </div>
-                    <h2 className="text-3xl font-black text-[#4A453E] tracking-tight uppercase">Waktu Cerita!</h2>
-                    <p className="text-[#A49F96] font-bold text-xs mt-1">Gunakan imajinasimu, jangan sebut kata aslinya!</p>
+                    <h2 className="text-3xl font-black text-[#4A453E] tracking-tight uppercase">Waktunya Membual!</h2>
+                    <p className="text-[#A49F96] font-bold text-xs mt-1">Ingat, jangan sebut kata aslinya!</p>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2.5">
@@ -727,7 +724,7 @@ export default function App() {
                     className="w-full py-5 bg-[#4A5D4E] text-white rounded-[2rem] font-black text-xl flex items-center justify-center gap-3 shadow-xl shadow-[#4A5D4E]/20 active:scale-95 transition-all"
                   >
                     <Vote size={24} />
-                    MULAI VOTE!
+                    MULAI EKSEKUSI!
                   </button>
                 </motion.div>
               )}
@@ -740,7 +737,7 @@ export default function App() {
                   className="space-y-6 py-4"
                 >
                   <div className="text-center py-2 md:py-3">
-                    <h2 className="text-3xl font-black text-[#C17C5C] tracking-tight uppercase mb-1">Vote Siapa?</h2>
+                    <h2 className="text-3xl font-black text-[#C17C5C] tracking-tight uppercase mb-1">Eksekusi Siapa?</h2>
                     <p className="text-[#A49F96] font-bold px-8 leading-relaxed text-xs">Pilih pemain yang dicurigai sebagai penyusup!</p>
                   </div>
 
@@ -754,7 +751,7 @@ export default function App() {
                         <div className="w-10 h-10 rounded-full bg-[#F5F2EA] group-hover:bg-[#C17C5C] group-hover:text-white flex items-center justify-center font-black text-base transition-all shadow-inner">
                           {p.name.charAt(0)}
                         </div>
-                        <span className="text-[9px] font-black text-[#4A453E] truncate w-full text-center">{p.name}</span>
+                        <span className="text-sm font-black text-[#4A453E] truncate w-full text-center">{p.name}</span>
                         <Vote className="text-[#D3CFC6] group-hover:text-[#C17C5C] transition-colors" size={14} />
                       </button>
                     ))}
@@ -788,7 +785,7 @@ export default function App() {
                             <Skull className="text-[#C17C5C]" size={28} />
                           </div>
                           <div>
-                            <p className="text-[#A49F96] text-[9px] font-black uppercase tracking-widest mb-1">Yakin eliminasi?</p>
+                            <p className="text-[#A49F96] text-[9px] font-black uppercase tracking-widest mb-1">Yakin Eksekusi?</p>
                             <h3 className="text-xl font-black text-[#4A453E]">{playerToEliminate.name}</h3>
                           </div>
                           <div className="grid grid-cols-1 gap-2">
