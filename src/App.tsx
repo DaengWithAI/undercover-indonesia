@@ -925,40 +925,44 @@ export default function App() {
                     </h2>
                   </div>
 
-                  <div className="w-full bg-[#FDFCFB] p-6 rounded-[3rem] shadow-xl shadow-[#D8D2C2]/30 border-4 border-[#E6E2D9] max-h-[40vh] flex flex-col">
-                    <h4 className="text-[9px] font-black uppercase tracking-[0.4em] text-[#A49F96] mb-4 italic text-center">Status Pemain</h4>
-                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-2">
-                       {gameState.players.map(p => (
-                         <div key={p.id} className="flex items-center justify-between p-3 bg-[#F5F2EA] rounded-2xl border border-[#E6E2D9]">
-                            <div className="flex items-center gap-3">
-                               <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs ${p.role === "CIVILIAN" ? "bg-[#4A5D4E] text-white" : "bg-[#C17C5C] text-white"}`}>
-                                 {p.name.charAt(0)}
-                               </div>
-                               <div className="flex flex-col">
-                                 <span className="text-xs font-black text-[#4A453E]">{p.name}</span>
-                                 <span className={`text-[7px] font-black uppercase tracking-widest ${p.role === "CIVILIAN" ? "text-[#4A5D4E]" : "text-[#C17C5C]"}`}>
-                                   {p.role === "CIVILIAN" ? "Warga" : "Penyusup"}
-                                 </span>
-                               </div>
-                            </div>
-                            <div className="text-[10px] font-black text-[#8E745A]">
-                               {leaderboard[p.name] || 0} WINs
-                            </div>
-                         </div>
-                       ))}
-                    </div>
-                  </div>
-
-                  <div className="w-full bg-[#FDFCFB] p-8 rounded-[3rem] shadow-xl shadow-[#D8D2C2]/30 border-4 border-[#E6E2D9]">
-                    <h4 className="text-[9px] font-black uppercase tracking-[0.4em] text-[#A49F96] mb-6 italic">Rahasia Kata</h4>
-                    <div className="grid grid-cols-1 gap-3">
-                      <div className="p-5 bg-[#F5F2EA] rounded-2xl border-2 border-[#E6E2D9]">
-                        <p className="text-[#4A5D4E] text-[9px] font-black uppercase mb-1">Pasukan Warga</p>
-                        <p className="text-xl font-black text-[#4A453E] tracking-tight">{gameState.wordPair?.civilian}</p>
+                  <div className="w-full bg-[#FDFCFB] rounded-[3rem] shadow-xl shadow-[#D8D2C2]/30 border-4 border-[#E6E2D9] overflow-hidden flex flex-col">
+                    {/* Header: Rahasia Kata */}
+                    <div className="p-6 bg-[#F5F2EA] border-b-2 border-[#E6E2D9]">
+                      <h4 className="text-[9px] font-black uppercase tracking-[0.4em] text-[#A49F96] mb-4 italic text-center">Rahasia Kata</h4>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="text-center">
+                          <p className="text-[#4A5D4E] text-[8px] font-black uppercase mb-1">Warga</p>
+                          <p className="text-sm font-black text-[#4A453E] tracking-tight">{gameState.wordPair?.civilian}</p>
+                        </div>
+                        <div className="text-center border-l border-[#E6E2D9]">
+                          <p className="text-[#C17C5C] text-[8px] font-black uppercase mb-1">Penyusup</p>
+                          <p className="text-sm font-black text-[#C17C5C] tracking-tight">{gameState.wordPair?.undercover}</p>
+                        </div>
                       </div>
-                      <div className="p-5 bg-[#F5F2EA] rounded-2xl border-2 border-[#E6E2D9]">
-                        <p className="text-[#C17C5C] text-[9px] font-black uppercase mb-1">Kelompok Penyusup</p>
-                        <p className="text-xl font-black text-[#C17C5C] tracking-tight">{gameState.wordPair?.undercover}</p>
+                    </div>
+
+                    {/* Body: Status Pemain */}
+                    <div className="p-6 flex flex-col min-h-[150px] max-h-[30vh]">
+                      <h4 className="text-[9px] font-black uppercase tracking-[0.4em] text-[#A49F96] mb-4 italic text-center">Status Pemain</h4>
+                      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1">
+                         {gameState.players.map(p => (
+                           <div key={p.id} className="flex items-center justify-between p-3 bg-[#F5F2EA] rounded-2xl border border-[#E6E2D9]">
+                              <div className="flex items-center gap-3">
+                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs ${p.role === "CIVILIAN" ? "bg-[#4A5D4E] text-white" : "bg-[#C17C5C] text-white"}`}>
+                                   {p.name.charAt(0)}
+                                 </div>
+                                 <div className="flex flex-col text-left">
+                                   <span className="text-xs font-black text-[#4A453E]">{p.name}</span>
+                                   <span className={`text-[7px] font-black uppercase tracking-widest ${p.role === "CIVILIAN" ? "text-[#4A5D4E]" : "text-[#C17C5C]"}`}>
+                                     {p.role === "CIVILIAN" ? "Warga" : "Penyusup"}
+                                   </span>
+                                 </div>
+                              </div>
+                              <div className="text-[10px] font-black text-[#8E745A]">
+                                 {leaderboard[p.name] || 0} WINs
+                              </div>
+                           </div>
+                         ))}
                       </div>
                     </div>
                   </div>
