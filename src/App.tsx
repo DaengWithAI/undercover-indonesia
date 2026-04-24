@@ -352,7 +352,7 @@ export default function App() {
           {(gameState.phase === "SETUP" && view === "GAME") && <span className="text-[#8E745A] block text-2xl">INDONESIA</span>}
         </h1>
         {(gameState.phase === "SETUP" && view === "GAME") && (
-          <p className="text-[#A49F96] text-[9px] font-black tracking-[0.3em] uppercase">Game Pengelabuan Kata</p>
+          <p className="text-[#A49F96] text-[9px] font-black tracking-[0.3em] uppercase">Awas Tukang Tipu!</p>
         )}
       </header>
 
@@ -631,11 +631,23 @@ export default function App() {
                   className="space-y-6"
                 >
                   <div className="text-center py-2 md:py-4">
-                    <div className="inline-block bg-[#F5F2EA] text-[#8E745A] px-6 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.4em] mb-2">
-                      RONDE {gameState.round}
+                    <h2 className="text-2xl font-black text-[#4A453E] tracking-tight uppercase py-2">Waktunya Membual!</h2>
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="inline-block bg-[#F5F2EA] text-[#8E745A] px-6 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.4em]">
+                        RONDE {gameState.round}
+                      </div>
+                      <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-widest text-[#A49F96] bg-white/40 px-4 py-2 rounded-2xl border border-[#E6E2D9]">
+                        <div className="flex items-center gap-1.5">
+                          <Heart size={10} className="text-[#4A5D4E] fill-[#4A5D4E]" />
+                          <span>{gameState.players.filter(p => p.isAlive && p.role === "CIVILIAN").length} WARGA</span>
+                        </div>
+                        <div className="w-px h-3 bg-[#E6E2D9]" />
+                        <div className="flex items-center gap-1.5">
+                          <Ghost size={10} className="text-[#C17C5C]" />
+                          <span>{gameState.players.filter(p => p.isAlive && p.role === "UNDERCOVER").length} PENYUSUP</span>
+                        </div>
+                      </div>
                     </div>
-                    <h2 className="text-3xl font-black text-[#4A453E] tracking-tight uppercase">Waktunya Membual!</h2>
-                    <p className="text-[#A49F96] font-bold text-xs mt-1">Ingat, jangan sebut kata aslinya!</p>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2.5">
@@ -660,7 +672,14 @@ export default function App() {
                           {p.name.charAt(0)}
                         </div>
                         <span className={`font-black text-[10px] truncate w-full text-center ${p.isAlive ? "text-[#4A453E]" : "text-[#A49F96]"}`}>{p.name}</span>
-                        {!p.isAlive && <Skull size={14} className="text-[#A49F96]" />}
+                        {!p.isAlive && (
+                          <div className="flex flex-col items-center gap-0.5 mt-0.5">
+                            <Skull size={12} className="text-[#A49F96]" />
+                            <span className={`text-[7px] font-black uppercase tracking-tighter ${p.role === "CIVILIAN" ? "text-[#4A5D4E]" : "text-[#C17C5C]"}`}>
+                              {p.role === "CIVILIAN" ? "WARGA" : "PENYUSUP"}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -741,9 +760,22 @@ export default function App() {
                   animate={{ opacity: 1, y: 0 }}
                   className="space-y-6 py-4"
                 >
-                  <div className="text-center py-2 md:py-3">
-                    <h2 className="text-3xl font-black text-[#C17C5C] tracking-tight uppercase mb-1">Eksekusi Siapa?</h2>
+                  <div className="text-center py-2 md:py-3 space-y-3">
+                    <h2 className="text-2xl font-black text-[#C17C5C] tracking-tight uppercase mb-1">Eksekusi Siapa?</h2>
                     <p className="text-[#A49F96] font-bold px-8 leading-relaxed text-xs">Pilih pemain yang dicurigai sebagai penyusup!</p>
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-widest text-[#A49F96] bg-white/40 px-4 py-2 rounded-2xl border border-[#E6E2D9]">
+                        <div className="flex items-center gap-1.5">
+                          <Heart size={10} className="text-[#4A5D4E] fill-[#4A5D4E]" />
+                          <span>{gameState.players.filter(p => p.isAlive && p.role === "CIVILIAN").length} WARGA</span>
+                        </div>
+                        <div className="w-px h-3 bg-[#E6E2D9]" />
+                        <div className="flex items-center gap-1.5">
+                          <Ghost size={10} className="text-[#C17C5C]" />
+                          <span>{gameState.players.filter(p => p.isAlive && p.role === "UNDERCOVER").length} PENYUSUP</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2.5">
@@ -871,7 +903,7 @@ export default function App() {
                   key="winner"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="flex flex-col items-center justify-center min-h-[70vh] text-center space-y-10"
+                  className="flex flex-col items-center justify-center min-h-[70vh] text-center space-y-10 pt-6 mt-6"
                 >
                   <div className="relative">
                     <motion.div
@@ -891,6 +923,30 @@ export default function App() {
                       {gameState.winner === "CIVILIANS" ? "WARGA" : "PENYUSUP"}
                       <span className="block text-3xl mt-1 text-[#8E745A]">JUARANYA!</span>
                     </h2>
+                  </div>
+
+                  <div className="w-full bg-[#FDFCFB] p-6 rounded-[3rem] shadow-xl shadow-[#D8D2C2]/30 border-4 border-[#E6E2D9] max-h-[40vh] flex flex-col">
+                    <h4 className="text-[9px] font-black uppercase tracking-[0.4em] text-[#A49F96] mb-4 italic text-center">Status Pemain</h4>
+                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-2">
+                       {gameState.players.map(p => (
+                         <div key={p.id} className="flex items-center justify-between p-3 bg-[#F5F2EA] rounded-2xl border border-[#E6E2D9]">
+                            <div className="flex items-center gap-3">
+                               <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs ${p.role === "CIVILIAN" ? "bg-[#4A5D4E] text-white" : "bg-[#C17C5C] text-white"}`}>
+                                 {p.name.charAt(0)}
+                               </div>
+                               <div className="flex flex-col">
+                                 <span className="text-xs font-black text-[#4A453E]">{p.name}</span>
+                                 <span className={`text-[7px] font-black uppercase tracking-widest ${p.role === "CIVILIAN" ? "text-[#4A5D4E]" : "text-[#C17C5C]"}`}>
+                                   {p.role === "CIVILIAN" ? "Warga" : "Penyusup"}
+                                 </span>
+                               </div>
+                            </div>
+                            <div className="text-[10px] font-black text-[#8E745A]">
+                               {leaderboard[p.name] || 0} WINs
+                            </div>
+                         </div>
+                       ))}
+                    </div>
                   </div>
 
                   <div className="w-full bg-[#FDFCFB] p-8 rounded-[3rem] shadow-xl shadow-[#D8D2C2]/30 border-4 border-[#E6E2D9]">
