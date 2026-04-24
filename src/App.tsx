@@ -4,7 +4,6 @@ import {
   Users, 
   Play, 
   Trash2, 
-  UserPlus, 
   ChevronRight, 
   Vote, 
   Trophy, 
@@ -15,7 +14,8 @@ import {
   Ghost,
   Home as HomeIcon,
   Search,
-  Eye
+  Eye,
+  X
 } from "lucide-react";
 import { Player, GameState, GamePhase, Role, Card } from "./types";
 
@@ -82,6 +82,8 @@ export default function App() {
     localStorage.setItem("undercover_v3_players", JSON.stringify(pastPlayers));
   }, [pastPlayers]);
 
+  const [isRefreshConfirmOpen, setIsRefreshConfirmOpen] = useState(false);
+
   const startGame = async () => {
     const playerCount = civilianTarget + undercoverTarget;
     if (playerCount < 3) return;
@@ -114,21 +116,99 @@ export default function App() {
         isTaken: false
       }));
 
+      const pickingOrder = gameState.players.slice(0, playerCount).map(p => p.id).sort(() => Math.random() - 0.5);
+
       setGameState(prev => ({
         ...prev,
-        players: [], // Reset for fresh game
+        players: prev.players.slice(0, playerCount).map(p => ({ ...p, isAlive: true, word: "", role: "CIVILIAN" })),
         wordPair,
         cardPool,
         phase: "ROLES",
-        round: 1
+        round: 1,
+        pickingOrder,
+        currentPickerIndex: 0,
+        starterPlayerId: undefined
       }));
-      setIsRestarting(false);
+      setIsRestarting(gameState.players.length > 0); // If we already have players, we treat it like a restart for those players
       setActivePlayerIndex(0);
       setShowPickedCard(false);
       setPickedCard(null);
       setNamingPlayerCardId(null);
     } catch (error) {
       console.error("Failed to start game", error);
+    }
+  };
+
+  const refreshWords = async () => {
+    setIsRefreshConfirmOpen(false);
+    try {
+      const response = await fetch("/api/random-pair");
+      if (!response.ok) throw new Error("API failed");
+      const wordPair = await response.json();
+
+      setGameState(prev => {
+        // If we are in "isRestarting" mode, use current players.
+        // Otherwise, use the size of the cardPool which matches the target count from setup.
+        const playerCount = isRestarting ? prev.players.length : prev.cardPool.length;
+        
+        const uCount = Math.max(1, Math.floor(playerCount / 3));
+        const cCount = playerCount - uCount;
+
+        const roles: Role[] = [
+          ...Array(cCount).fill("CIVILIAN" as Role),
+          ...Array(uCount).fill("UNDERCOVER" as Role)
+        ].sort(() => Math.random() - 0.5);
+
+        const newCardPool: Card[] = roles.map((role, idx) => ({
+          id: idx,
+          role,
+          word: role === "UNDERCOVER" ? wordPair.undercover : wordPair.civilian,
+          isTaken: false
+        }));
+
+        const updatedPlayers = prev.players.map(p => ({ ...p, isAlive: true, word: "", role: "CIVILIAN" }));
+        
+        // Fix: If we are not in restart mode (manual name entry), 
+        // clearing players fixes the "In Game" status bug in the import modal.
+        const finalizedPlayers = isRestarting ? updatedPlayers : [];
+
+        const pickingOrder = finalizedPlayers.length > 0 
+          ? finalizedPlayers.map(p => p.id).sort(() => Math.random() - 0.5)
+          : undefined;
+
+        return {
+          ...prev,
+          wordPair,
+          cardPool: newCardPool,
+          players: finalizedPlayers,
+          phase: "ROLES",
+          round: 1,
+          pickingOrder,
+          currentPickerIndex: 0,
+          starterPlayerId: undefined
+        };
+      });
+      
+      setActivePlayerIndex(0);
+      setShowPickedCard(false);
+      setPickedCard(null);
+      setNamingPlayerCardId(null);
+    } catch (e) {
+      console.error("Failed to refresh words", e);
+      setError("Gagal mengambil kata baru. Silakan coba lagi.");
+    }
+  };
+
+  const handleRefreshClick = () => {
+    const hasAnyPicked = gameState.cardPool.some(c => c.isTaken);
+    if (hasAnyPicked) {
+      setIsRefreshConfirmOpen(true);
+    } else {
+      // In roles phase, if no cards are picked, we don't strictly NEED a confirm,
+      // but according to user, we should disable it if none picked.
+      // However, if we are in other phases, we might want to refresh.
+      // Let's stick to the disabled attribute in the JSX.
+      refreshWords();
     }
   };
 
@@ -166,7 +246,8 @@ export default function App() {
         phase: "ROLES",
         round: 1,
         pickingOrder,
-        currentPickerIndex: 0
+        currentPickerIndex: 0,
+        starterPlayerId: undefined
       }));
       setIsRestarting(true);
       setActivePlayerIndex(0);
@@ -283,7 +364,15 @@ export default function App() {
       setPickedCard(null);
       setCurrentRevealingName("");
     } else {
-      setGameState(prev => ({ ...prev, phase: "DISCUSSION" }));
+      setGameState(prev => {
+        // Find first player to start clues
+        // For the very first round of a game, we can pick the first player
+        return { 
+          ...prev, 
+          phase: "DISCUSSION",
+          starterPlayerId: prev.starterPlayerId || prev.players[0]?.id
+        };
+      });
     }
   };
 
@@ -305,6 +394,21 @@ export default function App() {
     const aliveUndercovers = alivePlayers.filter(p => p.role === "UNDERCOVER");
     const aliveCivilians = alivePlayers.filter(p => p.role === "CIVILIAN");
 
+    const nextStarter = () => {
+      if (!eliminatedPlayer) return;
+      const alivePlayers = gameState.players;
+      const eliminatedIndex = alivePlayers.findIndex(p => p.id === eliminatedPlayer.id);
+      
+      // Find the next alive player starting from eliminatedIndex + 1
+      for (let i = 1; i <= alivePlayers.length; i++) {
+        const nextIndex = (eliminatedIndex + i) % alivePlayers.length;
+        if (alivePlayers[nextIndex].isAlive) {
+          return alivePlayers[nextIndex].id;
+        }
+      }
+      return alivePlayers[0].id;
+    };
+
     if (aliveUndercovers.length === 0) {
       updateScores("CIVILIANS");
       setGameState(prev => ({ ...prev, phase: "WINNER", winner: "CIVILIANS" }));
@@ -312,7 +416,12 @@ export default function App() {
       updateScores("UNDERCOVERS");
       setGameState(prev => ({ ...prev, phase: "WINNER", winner: "UNDERCOVERS" }));
     } else {
-      setGameState(prev => ({ ...prev, phase: "DISCUSSION", round: prev.round + 1 }));
+      setGameState(prev => ({ 
+        ...prev, 
+        phase: "DISCUSSION", 
+        round: prev.round + 1,
+        starterPlayerId: nextStarter()
+      }));
     }
   };
 
@@ -337,11 +446,9 @@ export default function App() {
     setIsRestarting(false);
   };
 
-  const resetGame = () => {
-    setGameState({
-      ...INITIAL_STATE,
-      players: gameState.players.map(p => ({ ...p, isAlive: true, word: "", role: "CIVILIAN" }))
-    });
+  const resetFullGame = () => {
+    setGameState(INITIAL_STATE);
+    setIsRestarting(false);
   };
 
   return (
@@ -435,6 +542,24 @@ export default function App() {
                     </div>
 
                     <div className="space-y-4">
+                      {gameState.players.length > 0 && (
+                        <div className="mb-4">
+                          <p className="text-[10px] font-black text-[#A49F96] uppercase tracking-[0.2em] mb-2">Pemain Terdaftar ({gameState.players.length})</p>
+                          <div className="flex flex-wrap gap-1.5 p-3 bg-[#F5F2EA] rounded-2xl border border-[#E6E2D9]">
+                            {gameState.players.map((p, idx) => (
+                              <span key={p.id} className="px-2 py-1 bg-white border border-[#E6E2D9] rounded-lg text-[10px] font-bold text-[#8E745A]">
+                                {p.name}
+                              </span>
+                            ))}
+                            {civilianTarget + undercoverTarget > gameState.players.length && (
+                              <span className="px-2 py-1 bg-[#C17C5C]/10 border border-[#C17C5C]/20 rounded-lg text-[10px] font-bold text-[#C17C5C] animate-pulse">
+                                + {civilianTarget + undercoverTarget - gameState.players.length} Pemain Baru
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
                       <div className="flex items-center justify-between">
                         <div className="flex flex-col">
                           <span className="text-xs font-black text-[#A49F96] uppercase tracking-widest">Civilian</span>
@@ -528,7 +653,7 @@ export default function App() {
                   <div className="text-center mb-6">
                     <p className="text-[#4A5D4E] font-black tracking-widest uppercase text-xs mb-1">Ambil Kartumu</p>
                     <h2 className="text-3xl font-black text-[#4A453E] tracking-tight leading-tight">
-                      {isRestarting && gameState.pickingOrder && gameState.currentPickerIndex !== undefined && gameState.currentPickerIndex < (civilianTarget + undercoverTarget)
+                      {isRestarting && gameState.pickingOrder && gameState.currentPickerIndex !== undefined && gameState.currentPickerIndex < gameState.players.length
                         ? (
                           <>
                             <span className="text-[#C17C5C] italic">{gameState.players.find(p => p.id === gameState.pickingOrder![gameState.currentPickerIndex])?.name}</span>
@@ -540,31 +665,52 @@ export default function App() {
                   </div>
 
                   {!showPickedCard && !showRevealReady && (
-                    <div className="grid grid-cols-3 gap-3 w-full">
-                      {gameState.cardPool.map((card) => (
-                        <motion.div
-                          whileHover={!card.isTaken ? { scale: 1.05, rotate: 2 } : {}}
-                          whileTap={!card.isTaken ? { scale: 0.95 } : {}}
-                          key={card.id}
-                          onClick={() => pickCard(card.id)}
-                          className={`aspect-[3/4] rounded-3xl border-4 flex flex-col items-center justify-center transition-all ${
-                            card.isTaken 
-                            ? "bg-[#E6E2D9] border-[#D3CFC6] opacity-60" 
-                            : "bg-[#FDFCFB] border-[#E6E2D9] cursor-pointer shadow-lg shadow-[#D8D2C2]/20"
-                          }`}
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-3 gap-3 w-full">
+                        {gameState.cardPool.map((card) => (
+                          <motion.div
+                            whileHover={!card.isTaken ? { scale: 1.05, rotate: 2 } : {}}
+                            whileTap={!card.isTaken ? { scale: 0.95 } : {}}
+                            key={card.id}
+                            onClick={() => pickCard(card.id)}
+                            className={`aspect-[3/4] rounded-3xl border-4 flex flex-col items-center justify-center transition-all ${
+                              card.isTaken 
+                              ? "bg-[#E6E2D9] border-[#D3CFC6] opacity-60" 
+                              : "bg-[#FDFCFB] border-[#E6E2D9] cursor-pointer shadow-lg shadow-[#D8D2C2]/20"
+                            }`}
+                          >
+                            {card.isTaken ? (
+                              <div className="flex flex-col items-center gap-1 p-1 px-2 w-full">
+                                <span className="text-sm font-black text-[#4A5D4E] uppercase text-center truncate w-full">{card.playerName}</span>
+                                <span className="text-[8px] font-black text-[#4A5D4E] uppercase">DIPILIH</span>
+                              </div>
+                            ) : (
+                              <User size={20} className="text-[#D3CFC6]" />
+                            )}
+                          </motion.div>
+                        ))}
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          disabled={!gameState.cardPool.some(c => c.isTaken)}
+                          onClick={handleRefreshClick}
+                          className="flex-1 py-3 bg-[#FDFCFB] text-[#8E745A] border-2 border-[#E6E2D9] rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
                         >
-                          {card.isTaken ? (
-                            <div className="flex flex-col items-center gap-1 p-1 px-2 w-full">
-                              <span className="text-sm font-black text-[#4A5D4E] uppercase text-center truncate w-full">{card.playerName}</span>
-                              <span className="text-[8px] font-black text-[#4A5D4E] uppercase">DIPILIH</span>
-                            </div>
-                          ) : (
-                            <User size={20} className="text-[#D3CFC6]" />
-                          )}
-                        </motion.div>
-                      ))}
+                          <RotateCcw size={14} />
+                          Ganti Kata
+                        </button>
+                        <button
+                          onClick={backToHome}
+                          className="flex-1 py-3 bg-[#FDFCFB] text-[#4A5D4E] border-2 border-[#E6E2D9] rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2"
+                        >
+                          <HomeIcon size={14} />
+                          Back Home
+                        </button>
+                      </div>
                     </div>
                   )}
+
 
                   {showRevealReady && (
                     <motion.div
@@ -636,6 +782,7 @@ export default function App() {
                       <div className="inline-block bg-[#F5F2EA] text-[#8E745A] px-6 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.4em]">
                         RONDE {gameState.round}
                       </div>
+
                       <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-widest text-[#A49F96] bg-white/40 px-4 py-2 rounded-2xl border border-[#E6E2D9]">
                         <div className="flex items-center gap-1.5">
                           <Heart size={10} className="text-[#4A5D4E] fill-[#4A5D4E]" />
@@ -651,15 +798,32 @@ export default function App() {
                   </div>
 
                   <div className="grid grid-cols-3 gap-2.5">
-                    {gameState.players.map((p) => (
-                      <div 
+                    {[...gameState.players].sort((a, b) => {
+                      if (!a.isAlive && b.isAlive) return 1;
+                      if (a.isAlive && !b.isAlive) return -1;
+                      if (a.id === gameState.starterPlayerId) return -1;
+                      if (b.id === gameState.starterPlayerId) return 1;
+                      return 0;
+                    }).map((p) => (
+                      <motion.div 
+                        layout
                         key={p.id}
-                        className={`p-3 rounded-3xl border-4 flex flex-col items-center justify-center gap-1.5 aspect-square transition-all relative ${
+                        className={`p-3 rounded-2xl border-2 flex flex-col items-center justify-center gap-1.5 h-32 transition-all relative ${
                           p.isAlive 
                           ? "bg-[#FDFCFB] border-[#E6E2D9] shadow-sm" 
                           : "bg-[#E6E2D9] border-[#D3CFC6] opacity-40 shadow-inner"
                         }`}
                       >
+                        {/* Starter Badge */}
+                        {p.isAlive && gameState.starterPlayerId === p.id && (
+                          <motion.div 
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            className="absolute -top-1.5 -left-1.5 w-7 h-7 bg-[#C17C5C] rounded-full border-2 border-white flex items-center justify-center z-10 shadow-md"
+                          >
+                            <span className="text-white text-[11px] font-black">1</span>
+                          </motion.div>
+                        )}
                         {p.isAlive && (
                           <button
                             onClick={() => setPlayerToPeek(p)}
@@ -674,13 +838,13 @@ export default function App() {
                         <span className={`font-black text-[10px] truncate w-full text-center ${p.isAlive ? "text-[#4A453E]" : "text-[#A49F96]"}`}>{p.name}</span>
                         {!p.isAlive && (
                           <div className="flex flex-col items-center gap-0.5 mt-0.5">
-                            <Skull size={12} className="text-[#A49F96]" />
+                            <Skull size={10} className="text-[#A49F96]" />
                             <span className={`text-[7px] font-black uppercase tracking-tighter ${p.role === "CIVILIAN" ? "text-[#4A5D4E]" : "text-[#C17C5C]"}`}>
                               {p.role === "CIVILIAN" ? "WARGA" : "PENYUSUP"}
                             </span>
                           </div>
                         )}
-                      </div>
+                      </motion.div>
                     ))}
                   </div>
 
@@ -990,6 +1154,48 @@ export default function App() {
         </AnimatePresence>
 
         <AnimatePresence>
+          {isRefreshConfirmOpen && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/60 backdrop-blur-md"
+            >
+              <motion.div 
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+                className="bg-[#FDFCFB] w-full max-w-sm rounded-[3rem] p-8 shadow-3xl text-center space-y-6 border-4 border-[#E6E2D9]"
+              >
+                <div className="w-14 h-14 bg-[#E6E2D9] rounded-2xl flex items-center justify-center mx-auto">
+                  <RotateCcw className="text-[#8E745A]" size={28} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-[#4A453E]">Ganti Kata?</h3>
+                  <p className="text-[#A49F96] text-xs font-bold mt-2 leading-relaxed">
+                    Semua pemain harus mengambil ulang kartu jika kata diganti. Lanjutkan?
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 gap-2">
+                  <button 
+                    onClick={refreshWords}
+                    className="w-full py-4 bg-[#C17C5C] text-white rounded-xl font-black shadow-md active:scale-95 transition-all"
+                  >
+                    YA, GANTI KATA
+                  </button>
+                  <button 
+                    onClick={() => setIsRefreshConfirmOpen(false)}
+                    className="w-full py-3.5 text-[#A49F96] font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all"
+                  >
+                    BATAL
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
           {namingPlayerCardId !== null && (
             <motion.div 
               initial={{ opacity: 0 }}
@@ -1005,7 +1211,7 @@ export default function App() {
               >
                 <div className="text-center">
                   <div className="w-14 h-14 bg-[#E6E2D9] rounded-2xl flex items-center justify-center mx-auto mb-4">
-                    <UserPlus className="text-[#4A5D4E]" size={28} />
+                    <User className="text-[#4A5D4E]" size={28} />
                   </div>
                   <h3 className="text-xl font-black text-[#4A453E]">Siapa Kamu?</h3>
                   <p className="text-[#A49F96] text-[10px] font-bold mt-1 uppercase tracking-tight">Ketik namamu di bawah ini</p>

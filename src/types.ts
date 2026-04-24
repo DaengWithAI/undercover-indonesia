@@ -32,4 +32,5 @@ export interface GameState {
   };
   pickingOrder?: string[];
   currentPickerIndex?: number;
+  starterPlayerId?: string;
 }
