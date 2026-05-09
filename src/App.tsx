@@ -365,13 +365,13 @@ export default function App() {
       setCurrentRevealingName("");
     } else {
       setGameState(prev => {
-        // Find first player to start clues
-        // Randomly pick an alive player to start the first round
-        const randomIndex = Math.floor(Math.random() * prev.players.length);
+        // Shuffle the players to randomize the "circle" and the first player
+        const shuffledPlayers = [...prev.players].sort(() => Math.random() - 0.5);
         return { 
           ...prev, 
+          players: shuffledPlayers,
           phase: "DISCUSSION",
-          starterPlayerId: prev.starterPlayerId || prev.players[randomIndex]?.id
+          starterPlayerId: shuffledPlayers[0]?.id
         };
       });
     }
