@@ -366,11 +366,12 @@ export default function App() {
     } else {
       setGameState(prev => {
         // Find first player to start clues
-        // For the very first round of a game, we can pick the first player
+        // Randomly pick an alive player to start the first round
+        const randomIndex = Math.floor(Math.random() * prev.players.length);
         return { 
           ...prev, 
           phase: "DISCUSSION",
-          starterPlayerId: prev.starterPlayerId || prev.players[0]?.id
+          starterPlayerId: prev.starterPlayerId || prev.players[randomIndex]?.id
         };
       });
     }
