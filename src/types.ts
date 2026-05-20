@@ -1,4 +1,4 @@
-export type Role = "CIVILIAN" | "UNDERCOVER" | "MR_WHITE";
+export type Role = "CIVILIAN" | "UNDERCOVER";
 
 export interface Player {
   id: string;
@@ -22,8 +22,7 @@ export interface Card {
 export interface GameState {
   players: Player[];
   phase: GamePhase;
-  currentPlayerTurn?: number;
-  winner?: "CIVILIANS" | "UNDERCOVERS" | "MR_WHITE";
+  winner?: "CIVILIANS" | "UNDERCOVERS";
   round: number;
   cardPool: Card[];
   wordPair?: {

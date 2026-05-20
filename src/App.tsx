@@ -53,7 +53,6 @@ interface SetupPrefs {
 
 interface SnapshotPayload {
   gameState: GameState;
-  activePlayerIndex: number;
   showPickedCard: boolean;
   pickedCard: { role: Role; word: string } | null;
   showRevealReady: boolean;
@@ -91,6 +90,19 @@ function lsClear(key: string): void {
   } catch { /* noop */ }
 }
 
+
+// ─────────────────────────────────────────────
+// FISHER-YATES SHUFFLE — unbiased
+// ─────────────────────────────────────────────
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 // ─────────────────────────────────────────────
 // HOOK — game persistence
 // ─────────────────────────────────────────────
@@ -117,7 +129,6 @@ export default function App() {
   // ── Core game state ──────────────────────────
   const [gameState, setGameState] = useState<GameState>(INITIAL_STATE);
   const [newName, setNewName] = useState("");
-  const [activePlayerIndex, setActivePlayerIndex] = useState(0);
   const [showPickedCard, setShowPickedCard] = useState(false);
   const [pickedCard, setPickedCard] = useState<{ role: Role; word: string } | null>(null);
   const [eliminatedPlayer, setEliminatedPlayer] = useState<Player | null>(null);
@@ -200,7 +211,6 @@ export default function App() {
     if (!ACTIVE_PHASES.includes(gameState.phase)) return;
     saveSnapshot({
       gameState,
-      activePlayerIndex,
       showPickedCard,
       pickedCard,
       showRevealReady,
@@ -211,7 +221,7 @@ export default function App() {
       undercoverTarget,
     });
   }, [
-    gameState, activePlayerIndex, showPickedCard, pickedCard,
+    gameState, showPickedCard, pickedCard,
     showRevealReady, currentRevealingName, eliminatedPlayer,
     isRestarting, civilianTarget, undercoverTarget, saveSnapshot,
   ]);
@@ -236,7 +246,6 @@ export default function App() {
   const handleResume = () => {
     if (!pendingResume) return;
     setGameState(pendingResume.gameState);
-    setActivePlayerIndex(pendingResume.activePlayerIndex);
     setShowPickedCard(pendingResume.showPickedCard);
     setPickedCard(pendingResume.pickedCard);
     setShowRevealReady(pendingResume.showRevealReady);
@@ -299,7 +308,7 @@ export default function App() {
         ...Array(civilianTarget).fill("CIVILIAN" as Role),
         ...Array(undercoverTarget).fill("UNDERCOVER" as Role),
       ];
-      const shuffledRoles = roles.sort(() => Math.random() - 0.5);
+      const shuffledRoles = shuffle(roles);
       const cardPool: Card[] = shuffledRoles.map((role, idx) => ({
         id: idx,
         role,
@@ -307,10 +316,11 @@ export default function App() {
         isTaken: false,
       }));
 
-      const pickingOrder = gameState.players
-        .slice(0, playerCount)
-        .map((p) => p.id)
-        .sort(() => Math.random() - 0.5);
+      const pickingOrder = shuffle(
+        gameState.players
+          .slice(0, playerCount)
+          .map((p) => p.id)
+      );
 
       setGameState((prev) => ({
         ...prev,
@@ -326,7 +336,6 @@ export default function App() {
         starterPlayerId: undefined,
       }));
       setIsRestarting(gameState.players.length > 0);
-      setActivePlayerIndex(0);
       setShowPickedCard(false);
       setPickedCard(null);
       setNamingPlayerCardId(null);
@@ -352,10 +361,10 @@ export default function App() {
         const uCount = Math.max(1, Math.floor(playerCount / 3));
         const cCount = playerCount - uCount;
 
-        const roles: Role[] = [
+        const roles: Role[] = shuffle([
           ...Array(cCount).fill("CIVILIAN" as Role),
           ...Array(uCount).fill("UNDERCOVER" as Role),
-        ].sort(() => Math.random() - 0.5);
+        ]);
 
         const newCardPool: Card[] = roles.map((role, idx) => ({
           id: idx,
@@ -388,8 +397,6 @@ export default function App() {
           starterPlayerId: undefined,
         };
       });
-
-      setActivePlayerIndex(0);
       setShowPickedCard(false);
       setPickedCard(null);
       setNamingPlayerCardId(null);
@@ -417,7 +424,7 @@ export default function App() {
         ...Array(civilianTarget).fill("CIVILIAN" as Role),
         ...Array(undercoverTarget).fill("UNDERCOVER" as Role),
       ];
-      const shuffledRoles = roles.sort(() => Math.random() - 0.5);
+      const shuffledRoles = shuffle(roles);
       const cardPool: Card[] = shuffledRoles.map((role, idx) => ({
         id: idx,
         role,
@@ -425,9 +432,9 @@ export default function App() {
         isTaken: false,
       }));
 
-      const pickingOrder = gameState.players
-        .map((p) => p.id)
-        .sort(() => Math.random() - 0.5);
+      const pickingOrder = shuffle(
+        gameState.players.map((p) => p.id)
+      );
 
       setGameState((prev) => ({
         ...prev,
@@ -446,7 +453,6 @@ export default function App() {
         starterPlayerId: undefined,
       }));
       setIsRestarting(true);
-      setActivePlayerIndex(0);
       setShowPickedCard(false);
       setPickedCard(null);
       setNamingPlayerCardId(null);
@@ -478,7 +484,7 @@ export default function App() {
     if (!card) return;
 
     const newPlayer: Player = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: Math.random().toString(36).substring(2, 11),
       name: name.trim(),
       role: card.role,
       isAlive: true,
@@ -648,8 +654,8 @@ export default function App() {
     // Re-read snapshot so resume banner shows when returning to SETUP
     const snapshot = loadSnapshot();
     setGameState(INITIAL_STATE);
+    setView("GAME");
     setNewName("");
-    setActivePlayerIndex(0);
     setShowPickedCard(false);
     setPickedCard(null);
     setEliminatedPlayer(null);
@@ -1779,7 +1785,7 @@ export default function App() {
                         setNewName(e.target.value);
                         setError(null);
                       }}
-                      onKeyPress={(e) =>
+                      onKeyDown={(e) =>
                         e.key === "Enter" && confirmPlayerName(newName)
                       }
                       placeholder="Nama kamu..."
@@ -1912,7 +1918,7 @@ export default function App() {
       </main>
 
       <footer className="w-full max-w-md py-8 text-center text-[#A49F96] text-[10px] font-black uppercase tracking-[0.6em]">
-        Undercover Indonesia D• 2026
+        Undercover Indonesia • 2026
       </footer>
 
       <style
