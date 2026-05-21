@@ -1,15 +1,6 @@
 // api/migrate.ts
-// Endpoint sekali jalan untuk migrasi 568 kata dari wordData.ts ke Upstash Redis
-// POST /api/migrate  (butuh x-admin-secret header)
-// Aman di-call berkali-kali — tidak duplikasi data yang sudah ada
-
-import { Redis } from "@upstash/redis";
+import { kvGet, kvSet } from "./_redis";
 import type { WordPair } from "./words";
-
-const kv = new Redis({
-  url: process.env.pdst_KV_REST_API_URL!,
-  token: process.env.pdst_KV_REST_API_TOKEN!,
-});
 
 const WORDS_KEY = "undercover:words";
 const ADMIN_SECRET = process.env.ADMIN_SECRET ?? "";
@@ -2290,44 +2281,35 @@ const SEED_PAIRS: { c: string; u: string }[] = [
 ];
 
 export default async function handler(req: any, res: any) {
-  if (req.method !== "POST") {
+  if (req.method !== "POST")
     return res.status(405).json({ error: "Method not allowed" });
-  }
 
   const auth = req.headers["x-admin-secret"] ?? "";
-  if (ADMIN_SECRET === "" || auth !== ADMIN_SECRET) {
+  if (ADMIN_SECRET === "" || auth !== ADMIN_SECRET)
     return res.status(401).json({ error: "Unauthorized" });
-  }
 
   try {
-    const existing = (await kv.get<WordPair[]>(WORDS_KEY)) ?? [];
+    const existing = (await kvGet<WordPair[]>(WORDS_KEY)) ?? [];
     const existingSet = new Set(
       existing.map((p) => `${p.c.toLowerCase()}|${p.u.toLowerCase()}`)
     );
 
-    const toAdd: WordPair[] = [];
-    for (const pair of SEED_PAIRS) {
-      const key = `${pair.c.toLowerCase()}|${pair.u.toLowerCase()}`;
-      if (!existingSet.has(key)) {
-        toAdd.push({
-          id: Date.now().toString(36) + Math.random().toString(36).substring(2, 7),
-          c: pair.c,
-          u: pair.u,
-          createdAt: Date.now(),
-        });
-      }
-    }
+    const toAdd: WordPair[] = SEED_PAIRS
+      .filter((p) => !existingSet.has(`${p.c.toLowerCase()}|${p.u.toLowerCase()}`))
+      .map((p) => ({
+        id: Date.now().toString(36) + Math.random().toString(36).substring(2, 7),
+        c: p.c, u: p.u, createdAt: Date.now(),
+      }));
 
     if (toAdd.length === 0) {
       return res.status(200).json({
-        message: "Semua kata sudah ada, tidak ada yang perlu ditambahkan",
+        message: "Semua kata sudah ada",
         existing: existing.length,
         added: 0,
       });
     }
 
-    await kv.set(WORDS_KEY, [...existing, ...toAdd]);
-
+    await kvSet(WORDS_KEY, [...existing, ...toAdd]);
     return res.status(200).json({
       message: "Migrasi selesai",
       existing: existing.length,
