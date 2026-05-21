@@ -135,6 +135,7 @@ export default async function handler(req: any, res: any) {
 
     try {
       const data = (await kvGet<GroupData>(key)) ?? emptyGroup();
+      // Server is authoritative for roundIndex — ignore client value
       const newRoundIndex = data.roundIndex + 1;
 
       for (const delta of payload.deltas) {

@@ -229,7 +229,10 @@ export default function App() {
   // ── Persist leaderboard & pastPlayers ─────────
   useEffect(() => { lsSet(STORAGE_KEYS.LEADERBOARD, leaderboard); }, [leaderboard]);
   useEffect(() => { lsSet(STORAGE_KEYS.PLAYERS, pastPlayers); }, [pastPlayers]);
-  useEffect(() => { if (groupCode) lsSet(STORAGE_KEYS.GROUP, groupCode); }, [groupCode]);
+  useEffect(() => {
+    if (groupCode) lsSet(STORAGE_KEYS.GROUP, groupCode);
+    else lsClear(STORAGE_KEYS.GROUP);
+  }, [groupCode]);
   useEffect(() => {
     lsSet(STORAGE_KEYS.SETUP, { civilianTarget, undercoverTarget });
   }, [civilianTarget, undercoverTarget]);
@@ -734,10 +737,10 @@ export default function App() {
       return next;
     });
 
-    // Submit ke Redis kalau grup aktif
-    if (groupCode && groupData) {
+    // Submit ke Redis kalau grup aktif (tidak perlu groupData — server yang kelola roundIndex)
+    if (groupCode) {
       const payload: SubmitScorePayload = {
-        roundIndex: (groupData.roundIndex ?? 0) + 1,
+        roundIndex: 0, // ignored by server, server increment sendiri
         deltas,
       };
       submitGroupScore(payload);
