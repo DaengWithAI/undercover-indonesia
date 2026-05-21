@@ -20,7 +20,7 @@ import {
   AlertTriangle,
   WifiOff,
 } from "lucide-react";
-import { Player, GameState, GamePhase, Role, Card } from "./types";
+import { Player, GameState, GamePhase, Role, Card, GroupData, ScoreDelta, SubmitScorePayload } from "./types";
 
 // ─────────────────────────────────────────────
 // CONSTANTS
@@ -30,6 +30,7 @@ const STORAGE_KEYS = {
   LEADERBOARD:"undercover_v3_leaderboard",
   SNAPSHOT:   "undercover_v3_snapshot",
   SETUP:       "undercover_v3_setup",
+  GROUP:       "undercover_v3_group",
 } as const;
 
 const ACTIVE_PHASES: GamePhase[] = ["ROLES", "DISCUSSION", "VOTING", "RESULT"];
@@ -39,6 +40,7 @@ const INITIAL_STATE: GameState = {
   phase: "SETUP",
   round: 1,
   cardPool: [],
+  missedVotes: 0,
 };
 
 // ─────────────────────────────────────────────
@@ -163,6 +165,10 @@ export default function App() {
   const [leaderboard, setLeaderboard] = useState<Record<string, number>>(() =>
     lsGet<Record<string, number>>(STORAGE_KEYS.LEADERBOARD, {})
   );
+  const [groupCode, setGroupCode] = useState<string>(() => lsGet<string>(STORAGE_KEYS.GROUP, ""));
+  const [groupData, setGroupData] = useState<GroupData | null>(null);
+  const [isLoadingGroup, setIsLoadingGroup] = useState(false);
+  const [groupError, setGroupError] = useState<string | null>(null);
   // Resume banner: shown when there is a valid mid-game snapshot
   const [pendingResume, setPendingResume] = useState<SnapshotPayload | null>(null);
 
@@ -214,6 +220,7 @@ export default function App() {
   // ── Persist leaderboard & pastPlayers ─────────
   useEffect(() => { lsSet(STORAGE_KEYS.LEADERBOARD, leaderboard); }, [leaderboard]);
   useEffect(() => { lsSet(STORAGE_KEYS.PLAYERS, pastPlayers); }, [pastPlayers]);
+  useEffect(() => { if (groupCode) lsSet(STORAGE_KEYS.GROUP, groupCode); }, [groupCode]);
   useEffect(() => {
     lsSet(STORAGE_KEYS.SETUP, { civilianTarget, undercoverTarget });
   }, [civilianTarget, undercoverTarget]);
@@ -256,7 +263,12 @@ export default function App() {
   // ─────────────────────────────────────────────
   const handleResume = () => {
     if (!pendingResume) return;
-    setGameState(pendingResume.gameState);
+    // Sanitize snapshot — old snapshots may not have missedVotes
+    const restoredState: GameState = {
+      ...pendingResume.gameState,
+      missedVotes: pendingResume.gameState.missedVotes ?? 0,
+    };
+    setGameState(restoredState);
     setShowPickedCard(pendingResume.showPickedCard);
     setPickedCard(pendingResume.pickedCard);
     setShowRevealReady(pendingResume.showRevealReady);
@@ -273,6 +285,52 @@ export default function App() {
     setPendingResume(null);
   };
 
+
+  // ─────────────────────────────────────────────
+  // GROUP API HELPERS
+  // ─────────────────────────────────────────────
+  const fetchGroup = useCallback(async (code: string): Promise<GroupData | null> => {
+    if (!code.trim()) return null;
+    try {
+      const res = await fetch(`/api/group/${code.toUpperCase()}`);
+      if (!res.ok) return null;
+      return res.json();
+    } catch { return null; }
+  }, []);
+
+  const joinGroup = async (code: string) => {
+    const trimmed = code.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (trimmed.length < 2) {
+      setGroupError("Kode minimal 2 karakter");
+      return;
+    }
+    setIsLoadingGroup(true);
+    setGroupError(null);
+    try {
+      const data = await fetchGroup(trimmed);
+      setGroupCode(trimmed);
+      setGroupData(data);
+    } catch {
+      setGroupError("Gagal terhubung ke server");
+    } finally {
+      setIsLoadingGroup(false);
+    }
+  };
+
+  const submitGroupScore = useCallback(async (payload: SubmitScorePayload) => {
+    if (!groupCode) return;
+    try {
+      await fetch(`/api/group/${groupCode}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const updated = await fetchGroup(groupCode);
+      if (updated) setGroupData(updated);
+    } catch (err) {
+      console.error("[submitGroupScore]", err);
+    }
+  }, [groupCode, fetchGroup]);
 
   // ─────────────────────────────────────────────
   // GAME ACTIONS
@@ -425,11 +483,13 @@ export default function App() {
           isAlive: true,
           word: "",
           role: "CIVILIAN" as Role,
+          eliminatedAtRound: undefined,
         })),
         wordPair,
         cardPool,
         phase: "ROLES",
         round: 1,
+        missedVotes: 0,
         pickingOrder,
         currentPickerIndex: 0,
         starterPlayerId: undefined,
@@ -781,53 +841,87 @@ export default function App() {
               className="space-y-6"
             >
               <div className="bg-[#FDFCFB] p-6 rounded-[2.5rem] shadow-xl shadow-[#D8D2C2]/30 border-4 border-[#E6E2D9]">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="p-2.5 bg-[#E6E2D9] rounded-2xl">
-                    <Trophy size={28} className="text-[#8E745A]" />
-                  </div>
-                  <h2 className="text-xl font-black text-[#4A453E] uppercase tracking-tight">
-                    Papan Skor
-                  </h2>
-                </div>
-
-                <div className="space-y-3">
-                  {Object.entries(leaderboard).length > 0 ? (
-                    Object.entries(leaderboard)
-                      .sort(([, a], [, b]) => (b as number) - (a as number))
-                      .map(([name, score], idx) => (
-                        <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: idx * 0.1 }}
-                          key={name}
-                          className="flex items-center justify-between bg-[#FDFCFB] px-5 py-3.5 rounded-2xl border border-[#E6E2D9] shadow-sm"
-                        >
-                          <div className="flex items-center gap-3">
-                            <span
-                              className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black ${
-                                idx === 0
-                                  ? "bg-[#C17C5C] text-white"
-                                  : "bg-[#E6E2D9] text-[#A49F96]"
-                              }`}
-                            >
-                              {idx + 1}
-                            </span>
-                            <span className="font-bold text-base text-[#4A453E]">
-                              {name}
-                            </span>
-                          </div>
-                          <div className="bg-[#E6E2D9]/30 text-[#4A5D4E] px-3 py-1.5 rounded-xl text-xs font-black">
-                            {score} WIN
-                          </div>
-                        </motion.div>
-                      ))
-                  ) : (
-                    <div className="text-center py-12 opacity-30">
-                      <Trophy size={64} className="mx-auto mb-4" />
-                      <p className="font-bold">Belum ada skor tercatat.</p>
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-[#E6E2D9] rounded-2xl">
+                      <Trophy size={28} className="text-[#8E745A]" />
                     </div>
+                    <div>
+                      <h2 className="text-xl font-black text-[#4A453E] uppercase tracking-tight">
+                        Papan Skor
+                      </h2>
+                      {groupCode && (
+                        <p className="text-[10px] font-black text-[#A49F96] uppercase tracking-widest mt-0.5">
+                          Grup {groupCode} · {groupData?.roundIndex ?? 0} ronde
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  {groupCode && groupData && (
+                    <button
+                      onClick={async () => {
+                        const data = await fetchGroup(groupCode);
+                        if (data) setGroupData(data);
+                      }}
+                      className="p-2 bg-[#E6E2D9] rounded-xl text-[#A49F96] hover:text-[#4A5D4E] transition-colors active:scale-90"
+                      aria-label="Refresh leaderboard"
+                    >
+                      <RefreshCw size={14} />
+                    </button>
                   )}
                 </div>
+
+                {/* Group leaderboard */}
+                {groupCode && groupData && Object.keys(groupData.leaderboard).length > 0 ? (
+                  <div className="space-y-2">
+                    {Object.entries(groupData.leaderboard)
+                      .sort(([, a], [, b]) => (b as any).points - (a as any).points)
+                      .map(([name, stats]: [string, any], idx) => {
+                        const streak = stats.streak?.count >= 2 ? stats.streak : null;
+                        return (
+                          <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: idx * 0.05 }}
+                            key={name}
+                            className="flex items-center justify-between bg-[#FDFCFB] px-4 py-3 rounded-2xl border border-[#E6E2D9] shadow-sm"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black ${idx === 0 ? "bg-[#C17C5C] text-white" : "bg-[#E6E2D9] text-[#A49F96]"}`}>
+                                {idx + 1}
+                              </span>
+                              <div>
+                                <span className="font-bold text-sm text-[#4A453E]">{name}</span>
+                                {streak && (
+                                  <span className={`ml-2 text-[9px] font-black px-1.5 py-0.5 rounded-full ${streak.role === "CIVILIAN" ? "bg-[#4A5D4E]/10 text-[#4A5D4E]" : "bg-[#C17C5C]/10 text-[#C17C5C]"}`}>
+                                    🔥 {streak.count}× {streak.role === "CIVILIAN" ? "WARGA" : "PENYUSUP"}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm font-black text-[#4A5D4E]">{stats.points} pts</div>
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                  </div>
+                ) : groupCode && !groupData ? (
+                  <div className="text-center py-8 opacity-40">
+                    <p className="font-bold text-sm">Join grup dulu untuk lihat leaderboard.</p>
+                  </div>
+                ) : !groupCode ? (
+                  <div className="text-center py-8 opacity-40">
+                    <Trophy size={48} className="mx-auto mb-3" />
+                    <p className="font-bold text-sm">Belum join grup.</p>
+                    <p className="text-[10px] mt-1 text-[#A49F96]">Set kode grup di halaman utama untuk sinkron leaderboard.</p>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 opacity-30">
+                    <Trophy size={48} className="mx-auto mb-3" />
+                    <p className="font-bold text-sm">Belum ada skor di grup ini.</p>
+                  </div>
+                )}
               </div>
 
               <button
@@ -848,6 +942,63 @@ export default function App() {
                   exit={{ opacity: 0, scale: 0.9 }}
                   className="space-y-6"
                 >
+                  {/* ── GRUP CODE INPUT ─────────────────────── */}
+                  <div className="bg-[#FDFCFB] p-5 rounded-[2.5rem] shadow-xl shadow-[#D8D2C2]/30 border-4 border-[#E6E2D9]">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 bg-[#E6E2D9] rounded-2xl">
+                        <Users className="text-[#4A5D4E]" size={18} />
+                      </div>
+                      <h2 className="text-base font-black text-[#4A453E] uppercase tracking-tight">
+                        Kode Grup
+                      </h2>
+                    </div>
+                    {groupCode && groupData ? (
+                      <div className="flex items-center justify-between p-3 bg-[#F5F2EA] rounded-2xl border border-[#E6E2D9]">
+                        <div>
+                          <p className="text-xs font-black text-[#4A5D4E] tracking-widest uppercase">{groupCode}</p>
+                          <p className="text-[10px] text-[#A49F96] font-bold mt-0.5">
+                            {Object.keys(groupData.leaderboard).length} pemain · ronde {groupData.roundIndex}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => { setGroupCode(""); setGroupData(null); }}
+                          className="p-2 bg-[#E6E2D9] rounded-xl text-[#A49F96] hover:text-[#C17C5C] transition-colors active:scale-90"
+                          aria-label="Keluar dari grup"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={groupCode}
+                            onChange={(e) => { setGroupCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "")); setGroupError(null); }}
+                            onKeyDown={(e) => e.key === "Enter" && joinGroup(groupCode)}
+                            placeholder="Kode grup (misal: GENG)"
+                            maxLength={8}
+                            className={`flex-1 bg-[#F5F2EA] border-2 rounded-xl px-4 py-3 text-[#4A453E] font-black text-sm tracking-widest outline-none focus:ring-4 focus:ring-[#4A5D4E]/20 transition-all ${groupError ? "border-red-400" : "border-[#E6E2D9]"}`}
+                          />
+                          <button
+                            onClick={() => joinGroup(groupCode)}
+                            disabled={isLoadingGroup || groupCode.length < 2}
+                            className="px-4 py-3 bg-[#4A5D4E] text-white rounded-xl font-black text-sm active:scale-95 transition-all disabled:opacity-40 flex items-center gap-1.5"
+                          >
+                            {isLoadingGroup
+                              ? <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.8, ease: "linear" }}><RefreshCw size={14} /></motion.div>
+                              : "JOIN"
+                            }
+                          </button>
+                        </div>
+                        {groupError && <p className="text-red-500 text-[10px] font-bold animate-pulse">⚠️ {groupError}</p>}
+                        <p className="text-[#A49F96] text-[10px] font-bold leading-relaxed">
+                          Buat kode bebas atau pakai kode yang sama dengan teman — leaderboard akan tersinkron antar device.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="bg-[#FDFCFB] p-5 rounded-[2.5rem] shadow-xl shadow-[#D8D2C2]/30 border-4 border-[#E6E2D9]">
                     <div className="flex items-center gap-3 mb-4">
                       <div className="p-2 bg-[#E6E2D9] rounded-2xl">
@@ -1652,7 +1803,7 @@ export default function App() {
                               </div>
                             </div>
                             <div className="text-[10px] font-black text-[#8E745A]">
-                              {leaderboard[p.name] || 0} WINs
+                              {groupCode && groupData?.leaderboard[p.name] ? groupData.leaderboard[p.name].points : leaderboard[p.name] || 0} pts
                             </div>
                           </div>
                         ))}

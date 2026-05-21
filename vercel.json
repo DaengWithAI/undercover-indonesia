@@ -1,6 +1,6 @@
 {
-  "installCommand": "npm install",
   "rewrites": [
+    { "source": "/api/group/:code", "destination": "/api/group" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
