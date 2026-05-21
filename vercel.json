@@ -1,15 +1,5 @@
 {
-  "functions": {
-    "api/random-pair.ts": {
-      "includeFiles": "node_modules/@upstash/redis/**"
-    },
-    "api/words.ts": {
-      "includeFiles": "node_modules/@upstash/redis/**"
-    },
-    "api/migrate.ts": {
-      "includeFiles": "node_modules/@upstash/redis/**"
-    }
-  },
+  "installCommand": "npm install",
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
