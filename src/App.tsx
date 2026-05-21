@@ -384,6 +384,7 @@ export default function App() {
         cardPool,
         phase: "ROLES",
         round: 1,
+        missedVotes: 0,
         pickingOrder,
         currentPickerIndex: 0,
         starterPlayerId: undefined,
@@ -434,7 +435,7 @@ export default function App() {
         const finalizedPlayers = isRestarting ? updatedPlayers : [];
         const pickingOrder =
           finalizedPlayers.length > 0
-            ? finalizedPlayers.map((p) => p.id).sort(() => Math.random() - 0.5)
+            ? shuffle(finalizedPlayers.map((p) => p.id))
             : undefined;
 
         return {
@@ -534,6 +535,17 @@ export default function App() {
       setPastPlayers((prev) => [...prev, trimmedName]);
     }
 
+    // Sync nama ke grup Redis kalau aktif
+    if (groupCode) {
+      fetch(`/api/group/${groupCode}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmedName }),
+      }).then((res) => res.json())
+        .then((data) => { if (data?.players) setGroupData(data); })
+        .catch(() => { /* non-critical, silent fail */ });
+    }
+
     const card = gameState.cardPool.find((c) => c.id === namingPlayerCardId);
     if (!card) return;
 
@@ -629,9 +641,7 @@ export default function App() {
       setCurrentRevealingName("");
     } else {
       setGameState((prev) => {
-        const shuffledPlayers = [...prev.players].sort(
-          () => Math.random() - 0.5
-        );
+        const shuffledPlayers = shuffle([...prev.players]);
         return {
           ...prev,
           players: shuffledPlayers,
@@ -2083,12 +2093,16 @@ export default function App() {
                     History Pemain
                   </h3>
                   <p className="text-[#A49F96] text-[9px] font-black uppercase tracking-widest mt-1 italic">
-                    Pilih nama atau hapus dari history
+                    {groupCode ? `Grup ${groupCode} + history lokal` : "Pilih nama atau hapus dari history"}
                   </p>
                 </div>
 
                 <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-2">
-                  {pastPlayers.slice().reverse().map((name) => {
+                  {/* Merge grup players + pastPlayers, deduplicate */}
+                  {[...new Set([
+                    ...(groupData?.players ?? []),
+                    ...pastPlayers,
+                  ])].reverse().map((name) => {
                     const isAlreadyInGame = gameState.players.some((p) => p.name === name);
                     return (
                       <div key={name} className="flex items-center gap-2">
