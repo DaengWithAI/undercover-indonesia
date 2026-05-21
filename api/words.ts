@@ -1,14 +1,37 @@
 // api/words.ts
-import { kvGet, kvSet } from "./_redis";
+
+const REDIS_URL = process.env.pdst_KV_REST_API_URL ?? process.env.KV_REST_API_URL ?? "";
+const REDIS_TOKEN = process.env.pdst_KV_REST_API_TOKEN ?? process.env.KV_REST_API_TOKEN ?? "";
+
+async function redisCmd(...args: (string | number)[]): Promise<any> {
+  const res = await fetch(REDIS_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${REDIS_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(args),
+  });
+  if (!res.ok) throw new Error(`Redis error: ${res.status}`);
+  const { result } = await res.json();
+  return result;
+}
+
+async function kvGet<T>(key: string): Promise<T | null> {
+  const raw = await redisCmd("GET", key);
+  if (raw === null) return null;
+  return typeof raw === "string" ? JSON.parse(raw) : raw;
+}
+
+async function kvSet(key: string, value: unknown): Promise<void> {
+  await redisCmd("SET", key, JSON.stringify(value));
+}
 
 const WORDS_KEY = "undercover:words";
 const ADMIN_SECRET = process.env.ADMIN_SECRET ?? "";
 
 export interface WordPair {
-  id: string;
-  c: string;
-  u: string;
-  createdAt: number;
+  id: string; c: string; u: string; createdAt: number;
 }
 
 function validateSecret(req: any): boolean {
@@ -39,7 +62,6 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: "Kata maksimal 50 karakter" });
     if (c.trim() === "__test__")
       return res.status(400).json({ error: "Test call — auth OK" });
-
     try {
       const pairs = (await kvGet<WordPair[]>(WORDS_KEY)) ?? [];
       const isDuplicate = pairs.some(
@@ -47,7 +69,6 @@ export default async function handler(req: any, res: any) {
                p.u.toLowerCase() === u.trim().toLowerCase()
       );
       if (isDuplicate) return res.status(409).json({ error: "Pasangan kata ini sudah ada" });
-
       const newPair: WordPair = {
         id: Date.now().toString(36) + Math.random().toString(36).substring(2, 7),
         c: c.trim(), u: u.trim(), createdAt: Date.now(),

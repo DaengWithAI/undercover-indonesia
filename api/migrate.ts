@@ -1,9 +1,36 @@
 // api/migrate.ts
-import { kvGet, kvSet } from "./_redis";
-import type { WordPair } from "./words";
+
+const REDIS_URL = process.env.pdst_KV_REST_API_URL ?? process.env.KV_REST_API_URL ?? "";
+const REDIS_TOKEN = process.env.pdst_KV_REST_API_TOKEN ?? process.env.KV_REST_API_TOKEN ?? "";
+
+async function redisCmd(...args: (string | number)[]): Promise<any> {
+  const res = await fetch(REDIS_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${REDIS_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(args),
+  });
+  if (!res.ok) throw new Error(`Redis error: ${res.status}`);
+  const { result } = await res.json();
+  return result;
+}
+
+async function kvGet<T>(key: string): Promise<T | null> {
+  const raw = await redisCmd("GET", key);
+  if (raw === null) return null;
+  return typeof raw === "string" ? JSON.parse(raw) : raw;
+}
+
+async function kvSet(key: string, value: unknown): Promise<void> {
+  await redisCmd("SET", key, JSON.stringify(value));
+}
 
 const WORDS_KEY = "undercover:words";
 const ADMIN_SECRET = process.env.ADMIN_SECRET ?? "";
+
+interface WordPair { id: string; c: string; u: string; createdAt: number; }
 
 const SEED_PAIRS: { c: string; u: string }[] = [
   {
@@ -2283,32 +2310,21 @@ const SEED_PAIRS: { c: string; u: string }[] = [
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST")
     return res.status(405).json({ error: "Method not allowed" });
-
   const auth = req.headers["x-admin-secret"] ?? "";
   if (ADMIN_SECRET === "" || auth !== ADMIN_SECRET)
     return res.status(401).json({ error: "Unauthorized" });
-
   try {
     const existing = (await kvGet<WordPair[]>(WORDS_KEY)) ?? [];
-    const existingSet = new Set(
-      existing.map((p) => `${p.c.toLowerCase()}|${p.u.toLowerCase()}`)
-    );
-
+    const existingSet = new Set(existing.map((p) => `${p.c.toLowerCase()}|${p.u.toLowerCase()}`));
     const toAdd: WordPair[] = SEED_PAIRS
       .filter((p) => !existingSet.has(`${p.c.toLowerCase()}|${p.u.toLowerCase()}`))
       .map((p) => ({
         id: Date.now().toString(36) + Math.random().toString(36).substring(2, 7),
         c: p.c, u: p.u, createdAt: Date.now(),
       }));
-
     if (toAdd.length === 0) {
-      return res.status(200).json({
-        message: "Semua kata sudah ada",
-        existing: existing.length,
-        added: 0,
-      });
+      return res.status(200).json({ message: "Semua kata sudah ada", existing: existing.length, added: 0 });
     }
-
     await kvSet(WORDS_KEY, [...existing, ...toAdd]);
     return res.status(200).json({
       message: "Migrasi selesai",
