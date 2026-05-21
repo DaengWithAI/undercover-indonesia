@@ -640,11 +640,18 @@ export default function App() {
   };
 
   const eliminatePlayer = (player: Player) => {
-    const updatedPlayers = gameState.players.map((p) =>
-      p.id === player.id ? { ...p, isAlive: false } : p
-    );
+    const isMissedVote = player.role === "CIVILIAN";
     setEliminatedPlayer(player);
-    setGameState((prev) => ({ ...prev, players: updatedPlayers, phase: "RESULT" }));
+    setGameState((prev) => ({
+      ...prev,
+      players: prev.players.map((p) =>
+        p.id === player.id
+          ? { ...p, isAlive: false, eliminatedAtRound: prev.round }
+          : p
+      ),
+      missedVotes: isMissedVote ? prev.missedVotes + 1 : prev.missedVotes,
+      phase: "RESULT",
+    }));
   };
 
   const checkWinner = () => {
@@ -688,17 +695,53 @@ export default function App() {
     }
   };
 
-  const updateScores = (winner: "CIVILIANS" | "UNDERCOVERS") => {
-    const newLeaderboard = { ...leaderboard };
-    gameState.players.forEach((p) => {
-      if (
-        (winner === "CIVILIANS" && p.role === "CIVILIAN") ||
-        (winner === "UNDERCOVERS" && p.role === "UNDERCOVER")
-      ) {
-        newLeaderboard[p.name] = (newLeaderboard[p.name] || 0) + 1;
+  const calculateDeltas = (winner: "CIVILIANS" | "UNDERCOVERS"): ScoreDelta[] => {
+    const civilianWon = winner === "CIVILIANS";
+    const missedVotes = gameState.missedVotes ?? 0;
+
+    return gameState.players.map((p) => {
+      let points = 0;
+      const survived = p.isAlive;
+      const won = civilianWon ? p.role === "CIVILIAN" : p.role === "UNDERCOVER";
+
+      if (civilianWon) {
+        if (p.role === "CIVILIAN" && survived) points = 3;
+        // Undercover bonus: survived past round 1 but still lost
+        if (p.role === "UNDERCOVER" && !survived && (p.eliminatedAtRound ?? 1) >= 2) points = 2;
+      } else {
+        if (p.role === "UNDERCOVER" && survived) {
+          points = 5 + missedVotes; // +1 per missed vote
+        }
       }
+
+      return {
+        name: p.name,
+        role: p.role,
+        points,
+        won,
+        eliminatedAtRound: p.eliminatedAtRound ?? null,
+      };
     });
-    setLeaderboard(newLeaderboard);
+  };
+
+  const updateScores = (winner: "CIVILIANS" | "UNDERCOVERS") => {
+    const deltas = calculateDeltas(winner);
+
+    // Update local leaderboard (poin display lokal)
+    setLeaderboard((prev) => {
+      const next = { ...prev };
+      deltas.forEach((d) => { next[d.name] = (next[d.name] || 0) + d.points; });
+      return next;
+    });
+
+    // Submit ke Redis kalau grup aktif
+    if (groupCode && groupData) {
+      const payload: SubmitScorePayload = {
+        roundIndex: (groupData.roundIndex ?? 0) + 1,
+        deltas,
+      };
+      submitGroupScore(payload);
+    }
   };
 
   const backToHome = () => {
