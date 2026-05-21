@@ -1,10 +1,16 @@
-import {StrictMode} from 'react';
-import {createRoot} from 'react-dom/client';
-import App from './App.tsx';
-import './index.css';
+import { StrictMode, lazy, Suspense } from "react";
+import { createRoot } from "react-dom/client";
+import App from "./App.tsx";
+import "./index.css";
 
-createRoot(document.getElementById('root')!).render(
+const AdminPanel = lazy(() => import("./pages/AdminPanel.tsx"));
+
+const isAdmin = window.location.pathname === "/admin";
+
+createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
-  </StrictMode>,
+    <Suspense fallback={null}>
+      {isAdmin ? <AdminPanel /> : <App />}
+    </Suspense>
+  </StrictMode>
 );

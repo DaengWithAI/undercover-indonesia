@@ -1,10 +1,10 @@
-import { loadEnvFile } from "node:process";
-try { loadEnvFile(".env.local"); } catch { /* file tidak ada, skip */ }
+// api/migrate.ts
+// Endpoint sekali jalan untuk migrasi 568 kata dari wordData.ts ke Upstash Redis
+// POST /api/migrate  (butuh x-admin-secret header)
+// Aman di-call berkali-kali — tidak duplikasi data yang sudah ada
 
-import express from "express";
-import path from "path";
-import { createServer as createViteServer } from "vite";
 import { Redis } from "@upstash/redis";
+import type { WordPair } from "./words";
 
 const kv = new Redis({
   url: process.env.pdst_KV_REST_API_URL!,
@@ -12,8 +12,8 @@ const kv = new Redis({
 });
 
 const WORDS_KEY = "undercover:words";
+const ADMIN_SECRET = process.env.ADMIN_SECRET ?? "";
 
-// Seed data sebagai fallback kalau Redis kosong di lokal
 const SEED_PAIRS: { c: string; u: string }[] = [
   {
     "c": "Nasi Goreng",
@@ -2289,168 +2289,53 @@ const SEED_PAIRS: { c: string; u: string }[] = [
   }
 ];
 
-async function startServer() {
-  const app = express();
-  const PORT = Number(process.env.PORT) || 3000;
-  const ADMIN_SECRET = process.env.ADMIN_SECRET ?? "";
-
-  app.use(express.json());
-
-  // ── Helper: validate admin secret ──────────────────────────────────────
-  function isAuthorized(req: express.Request): boolean {
-    const auth = (req.headers["x-admin-secret"] ?? req.query?.secret ?? "") as string;
-    return ADMIN_SECRET !== "" && auth === ADMIN_SECRET;
+export default async function handler(req: any, res: any) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
-  // ── GET /api/random-pair ────────────────────────────────────────────────
-  app.get("/api/random-pair", async (req, res) => {
-    try {
-      let pairs = await kv.get<any[]>(WORDS_KEY);
+  const auth = req.headers["x-admin-secret"] ?? "";
+  if (ADMIN_SECRET === "" || auth !== ADMIN_SECRET) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
 
-      // Fallback ke seed data kalau Redis kosong
-      if (!pairs || pairs.length === 0) {
-        console.warn("[random-pair] Redis kosong, pakai seed data");
-        pairs = SEED_PAIRS;
-      }
+  try {
+    const existing = (await kv.get<WordPair[]>(WORDS_KEY)) ?? [];
+    const existingSet = new Set(
+      existing.map((p) => `${p.c.toLowerCase()}|${p.u.toLowerCase()}`)
+    );
 
-      const idx = Math.floor(Math.random() * pairs.length);
-      const pair = pairs[idx];
-      res.setHeader("Cache-Control", "no-store");
-      res.json({ civilian: pair.c, undercover: pair.u, totalPairs: pairs.length });
-    } catch (err) {
-      console.error("[random-pair]", err);
-      // Fallback ke seed data kalau Redis error (misal env belum di-setup)
-      const idx = Math.floor(Math.random() * SEED_PAIRS.length);
-      const pair = SEED_PAIRS[idx];
-      res.json({ civilian: pair.c, undercover: pair.u, totalPairs: SEED_PAIRS.length });
-    }
-  });
-
-  // ── GET /api/words ──────────────────────────────────────────────────────
-  app.get("/api/words", async (req, res) => {
-    try {
-      const pairs = await kv.get<any[]>(WORDS_KEY);
-      res.json({ pairs: pairs ?? [], total: pairs?.length ?? 0 });
-    } catch (err) {
-      console.error("[words:GET]", err);
-      res.status(500).json({ error: "Gagal mengambil data" });
-    }
-  });
-
-  // ── POST /api/words ─────────────────────────────────────────────────────
-  app.post("/api/words", async (req, res) => {
-    if (!isAuthorized(req)) return res.status(401).json({ error: "Unauthorized" });
-
-    const { c, u } = req.body ?? {};
-    if (!c?.trim() || !u?.trim()) {
-      return res.status(400).json({ error: "Kata civilian dan undercover wajib diisi" });
-    }
-    if (c.trim().length > 50 || u.trim().length > 50) {
-      return res.status(400).json({ error: "Kata maksimal 50 karakter" });
-    }
-
-    // Block test call dari auth check
-    if (c.trim() === "__test__") {
-      return res.status(400).json({ error: "Test call — auth OK" });
-    }
-
-    try {
-      const pairs = (await kv.get<any[]>(WORDS_KEY)) ?? [];
-      const isDuplicate = pairs.some(
-        (p) => p.c.toLowerCase() === c.trim().toLowerCase() &&
-               p.u.toLowerCase() === u.trim().toLowerCase()
-      );
-      if (isDuplicate) return res.status(409).json({ error: "Pasangan kata ini sudah ada" });
-
-      const newPair = {
-        id: Date.now().toString(36) + Math.random().toString(36).substring(2, 7),
-        c: c.trim(), u: u.trim(), createdAt: Date.now(),
-      };
-      await kv.set(WORDS_KEY, [...pairs, newPair]);
-      return res.status(201).json({ pair: newPair, total: pairs.length + 1 });
-    } catch (err) {
-      console.error("[words:POST]", err);
-      res.status(500).json({ error: "Gagal menyimpan data" });
-    }
-  });
-
-  // ── DELETE /api/words ───────────────────────────────────────────────────
-  app.delete("/api/words", async (req, res) => {
-    if (!isAuthorized(req)) return res.status(401).json({ error: "Unauthorized" });
-
-    const { id } = req.query ?? {};
-    if (!id) return res.status(400).json({ error: "ID diperlukan" });
-
-    try {
-      const pairs = (await kv.get<any[]>(WORDS_KEY)) ?? [];
-      const filtered = pairs.filter((p) => p.id !== id);
-      if (filtered.length === pairs.length) {
-        return res.status(404).json({ error: "Kata tidak ditemukan" });
-      }
-      await kv.set(WORDS_KEY, filtered);
-      return res.json({ deleted: id, total: filtered.length });
-    } catch (err) {
-      console.error("[words:DELETE]", err);
-      res.status(500).json({ error: "Gagal menghapus data" });
-    }
-  });
-
-  // ── POST /api/migrate ───────────────────────────────────────────────────
-  app.post("/api/migrate", async (req, res) => {
-    if (!isAuthorized(req)) return res.status(401).json({ error: "Unauthorized" });
-
-    try {
-      const existing = (await kv.get<any[]>(WORDS_KEY)) ?? [];
-      const existingSet = new Set(
-        existing.map((p) => `${p.c.toLowerCase()}|${p.u.toLowerCase()}`)
-      );
-
-      const toAdd = SEED_PAIRS
-        .filter((p) => !existingSet.has(`${p.c.toLowerCase()}|${p.u.toLowerCase()}`))
-        .map((p) => ({
+    const toAdd: WordPair[] = [];
+    for (const pair of SEED_PAIRS) {
+      const key = `${pair.c.toLowerCase()}|${pair.u.toLowerCase()}`;
+      if (!existingSet.has(key)) {
+        toAdd.push({
           id: Date.now().toString(36) + Math.random().toString(36).substring(2, 7),
-          c: p.c, u: p.u, createdAt: Date.now(),
-        }));
-
-      if (toAdd.length === 0) {
-        return res.json({
-          message: "Semua kata sudah ada",
-          existing: existing.length, added: 0,
+          c: pair.c,
+          u: pair.u,
+          createdAt: Date.now(),
         });
       }
-
-      await kv.set(WORDS_KEY, [...existing, ...toAdd]);
-      return res.json({
-        message: "Migrasi selesai",
-        existing: existing.length,
-        added: toAdd.length,
-        total: existing.length + toAdd.length,
-      });
-    } catch (err) {
-      console.error("[migrate]", err);
-      res.status(500).json({ error: "Migrasi gagal" });
     }
-  });
 
-  // ── Vite middleware ─────────────────────────────────────────────────────
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
+    if (toAdd.length === 0) {
+      return res.status(200).json({
+        message: "Semua kata sudah ada, tidak ada yang perlu ditambahkan",
+        existing: existing.length,
+        added: 0,
+      });
+    }
+
+    await kv.set(WORDS_KEY, [...existing, ...toAdd]);
+
+    return res.status(200).json({
+      message: "Migrasi selesai",
+      existing: existing.length,
+      added: toAdd.length,
+      total: existing.length + toAdd.length,
     });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+  } catch (err) {
+    console.error("[migrate]", err);
+    return res.status(500).json({ error: "Migrasi gagal" });
   }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`\n  🎮 Game:  http://localhost:${PORT}`);
-    console.log(`  🔧 Admin: http://localhost:${PORT}/admin\n`);
-  });
 }
-
-startServer();

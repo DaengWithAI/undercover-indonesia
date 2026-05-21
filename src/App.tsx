@@ -44,7 +44,7 @@ const INITIAL_STATE: GameState = {
 // ─────────────────────────────────────────────
 // TYPES
 // ─────────────────────────────────────────────
-type ApiError = "network" | "server" | null;
+type ApiError = "network" | "server" | "empty" | null;
 
 interface SetupPrefs {
   civilianTarget: number;
@@ -174,6 +174,27 @@ export default function App() {
     gamePhaseRef.current = gameState.phase;
   }, [gameState.phase]);
 
+  // ─────────────────────────────────────────────
+  // API HELPER — defined early, used by useEffects below
+  // ─────────────────────────────────────────────
+  const fetchWordPair = useCallback(async (): Promise<{ civilian: string; undercover: string; totalPairs: number }> => {
+    const attempt = async (retries = 2): Promise<Response> => {
+      try {
+        const res = await fetch("/api/random-pair");
+        if (!res.ok && retries > 0) return attempt(retries - 1);
+        return res;
+      } catch (e) {
+        if (retries > 0) return attempt(retries - 1);
+        throw e;
+      }
+    };
+    let res: Response;
+    try { res = await attempt(); } catch { throw new Error("network"); }
+    if (res.status === 503) throw new Error("empty");
+    if (!res.ok) throw new Error("server");
+    return res.json();
+  }, []);
+
   // ── On mount: check for resumable snapshot ────
   useEffect(() => {
     const snapshot = loadSnapshot();
@@ -185,19 +206,10 @@ export default function App() {
 
   // ── Fetch word-pair count ─────────────────────
   useEffect(() => {
-    const fetchCount = async () => {
-      try {
-        const res = await fetch("/api/random-pair");
-        if (res.ok) {
-          const data = await res.json();
-          if (data.totalPairs) setTotalWordPairs(data.totalPairs);
-        }
-      } catch (e) {
-        console.error("Failed to fetch word count", e);
-      }
-    };
-    fetchCount();
-  }, []);
+    fetchWordPair()
+      .then((data) => { if (data.totalPairs) setTotalWordPairs(data.totalPairs); })
+      .catch(() => { /* non-critical, silent fail */ });
+  }, [fetchWordPair]);
 
   // ── Persist leaderboard & pastPlayers ─────────
   useEffect(() => { lsSet(STORAGE_KEYS.LEADERBOARD, leaderboard); }, [leaderboard]);
@@ -226,7 +238,6 @@ export default function App() {
     isRestarting, civilianTarget, undercoverTarget, saveSnapshot,
   ]);
 
-  // ── beforeunload warning ──────────────────────
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (ACTIVE_PHASES.includes(gamePhaseRef.current)) {
@@ -264,45 +275,17 @@ export default function App() {
 
 
   // ─────────────────────────────────────────────
-  // API HELPER
-  // ─────────────────────────────────────────────
-  const fetchWordPair = async (): Promise<{ civilian: string; undercover: string; totalPairs: number }> => {
-    const attempt = async (retries = 2): Promise<Response> => {
-      try {
-        const res = await fetch("/api/random-pair");
-        if (!res.ok && retries > 0) return attempt(retries - 1);
-        return res;
-      } catch (e) {
-        if (retries > 0) return attempt(retries - 1);
-        throw e;
-      }
-    };
-    let res: Response;
-    try { res = await attempt(); } catch { throw new Error("network"); }
-    if (!res.ok) throw new Error("server");
-    return res.json();
-  };
-
-  // ─────────────────────────────────────────────
   // GAME ACTIONS
   // ─────────────────────────────────────────────
   const startGame = async () => {
     const playerCount = civilianTarget + undercoverTarget;
-    if (playerCount < 3) return;
+    if (playerCount < 3 || isStartingGame) return;
+
+    setIsStartingGame(true);
+    setApiError(null);
 
     try {
-      const fetchWithRetry = async (url: string, retries = 2): Promise<Response> => {
-        const res = await fetch(url);
-        if (!res.ok && retries > 0) return fetchWithRetry(url, retries - 1);
-        return res;
-      };
-
-      const response = await fetchWithRetry("/api/random-pair");
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`API failed: ${response.status} ${text}`);
-      }
-      const wordPair = await response.json();
+      const wordPair = await fetchWordPair();
 
       const roles: Role[] = [
         ...Array(civilianTarget).fill("CIVILIAN" as Role),
@@ -343,7 +326,7 @@ export default function App() {
       setPendingResume(null);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "unknown";
-      setApiError(msg === "network" ? "network" : "server");
+      setApiError(msg === "network" ? "network" : msg === "empty" ? "empty" : "server");
     } finally {
       setIsStartingGame(false);
     }
@@ -351,10 +334,9 @@ export default function App() {
 
   const refreshWords = async () => {
     setIsRefreshConfirmOpen(false);
+    setApiError(null);
     try {
-      const response = await fetch("/api/random-pair");
-      if (!response.ok) throw new Error("API failed");
-      const wordPair = await response.json();
+      const wordPair = await fetchWordPair();
 
       setGameState((prev) => {
         const playerCount = isRestarting ? prev.players.length : prev.cardPool.length;
@@ -402,7 +384,7 @@ export default function App() {
       setNamingPlayerCardId(null);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "unknown";
-      setApiError(msg === "network" ? "network" : "server");
+      setApiError(msg === "network" ? "network" : msg === "empty" ? "empty" : "server");
     }
   };
 
@@ -419,7 +401,7 @@ export default function App() {
     setApiError(null);
     try {
       const wordPair = await fetchWordPair();
-
+  
       const roles: Role[] = [
         ...Array(civilianTarget).fill("CIVILIAN" as Role),
         ...Array(undercoverTarget).fill("UNDERCOVER" as Role),
@@ -459,7 +441,7 @@ export default function App() {
       setError(null);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "unknown";
-      setApiError(msg === "network" ? "network" : "server");
+      setApiError(msg === "network" ? "network" : msg === "empty" ? "empty" : "server");
     }
   };
 
@@ -653,6 +635,7 @@ export default function App() {
   const backToHome = () => {
     // Re-read snapshot so resume banner shows when returning to SETUP
     const snapshot = loadSnapshot();
+    setIsStartingGame(false);
     setGameState(INITIAL_STATE);
     setView("GAME");
     setNewName("");
@@ -734,6 +717,50 @@ export default function App() {
                   <X size={14} className="text-white" />
                 </button>
               </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── API ERROR BANNER ──────────────────────── */}
+      <AnimatePresence>
+        {apiError && (
+          <motion.div
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            className="w-full max-w-sm mb-3"
+          >
+            <div className="bg-[#C17C5C] text-white rounded-[1.75rem] px-5 py-4 flex items-center gap-3 shadow-lg border-2 border-[#D08060]">
+              <div className="p-2 bg-white/15 rounded-xl flex-shrink-0">
+                {apiError === "network"
+                  ? <WifiOff size={18} className="text-white" />
+                  : <AlertTriangle size={18} className="text-white" />
+                }
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-black text-sm leading-snug">
+                  {apiError === "network"
+                    ? "Tidak ada koneksi"
+                    : apiError === "empty"
+                    ? "Kata belum tersedia"
+                    : "Server bermasalah"}
+                </p>
+                <p className="text-white/70 text-[10px] font-bold mt-0.5">
+                  {apiError === "network"
+                    ? "Periksa koneksi internet lalu coba lagi"
+                    : apiError === "empty"
+                    ? "Buka /admin lalu jalankan Import terlebih dahulu"
+                    : "Gagal mengambil kata. Coba lagi sebentar"}
+                </p>
+              </div>
+              <button
+                onClick={() => setApiError(null)}
+                className="p-2 bg-white/15 rounded-xl active:scale-95 transition-all flex-shrink-0"
+                aria-label="Tutup error"
+              >
+                <X size={14} className="text-white" />
+              </button>
             </div>
           </motion.div>
         )}

@@ -1,21 +1,39 @@
-import { WORD_PAIRS } from "./wordData.js";
+// api/random-pair.ts
+// Fetch dari Upstash Redis. Tidak ada lagi dependensi ke wordData.ts.
 
-const VALID_WORDS = WORD_PAIRS.filter((p) => p.c && p.u);
+import { Redis } from "@upstash/redis";
+import type { WordPair } from "./words";
 
-export default function handler(req: any, res: any) {
+const kv = new Redis({
+  url: process.env.pdst_KV_REST_API_URL!,
+  token: process.env.pdst_KV_REST_API_TOKEN!,
+});
+
+const WORDS_KEY = "undercover:words";
+
+export default async function handler(req: any, res: any) {
   res.setHeader("Cache-Control", "no-store, max-age=0");
   res.setHeader("Content-Type", "application/json");
 
   try {
-    const randomIndex = Math.floor(Math.random() * VALID_WORDS.length);
-    const pair = VALID_WORDS[randomIndex];
+    const pairs = await kv.get<WordPair[]>(WORDS_KEY);
+
+    if (!pairs || pairs.length === 0) {
+      return res.status(503).json({
+        error: "Belum ada kata tersedia. Jalankan migrasi terlebih dahulu.",
+      });
+    }
+
+    const randomIndex = Math.floor(Math.random() * pairs.length);
+    const pair = pairs[randomIndex];
 
     return res.status(200).json({
       civilian: pair.c,
       undercover: pair.u,
-      totalPairs: VALID_WORDS.length,
+      totalPairs: pairs.length,
     });
   } catch (err) {
-    return res.status(500).json({ error: "Gagal mengambil data" });
+    console.error("[random-pair]", err);
+    return res.status(500).json({ error: "Gagal mengambil kata" });
   }
 }
