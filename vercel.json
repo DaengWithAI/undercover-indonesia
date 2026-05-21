@@ -1,7 +1,13 @@
 {
   "functions": {
-    "api/*.ts": {
-      "runtime": "@vercel/node@5.8.3"
+    "api/random-pair.ts": {
+      "includeFiles": "node_modules/@upstash/redis/**"
+    },
+    "api/words.ts": {
+      "includeFiles": "node_modules/@upstash/redis/**"
+    },
+    "api/migrate.ts": {
+      "includeFiles": "node_modules/@upstash/redis/**"
     }
   },
   "rewrites": [
