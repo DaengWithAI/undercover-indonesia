@@ -210,6 +210,15 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── On mount: re-fetch group data if groupCode saved ──
+  useEffect(() => {
+    if (!groupCode) return;
+    fetchGroup(groupCode).then((data) => {
+      if (data) setGroupData(data);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Fetch word-pair count ─────────────────────
   useEffect(() => {
     fetchWordPair()
@@ -760,6 +769,7 @@ export default function App() {
                 <p className="text-white/60 text-[10px] font-bold uppercase tracking-wider mt-0.5">
                   Ronde {pendingResume.gameState.round} •{" "}
                   {pendingResume.gameState.players.length} pemain
+                  {groupCode ? ` • ${groupCode}` : ""}
                 </p>
               </div>
               <div className="flex gap-2 flex-shrink-0">
